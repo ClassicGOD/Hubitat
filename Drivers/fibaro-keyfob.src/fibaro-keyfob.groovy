@@ -121,7 +121,6 @@ def zwaveEvent(hubitat.zwave.commands.wakeupv1.WakeUpNotification cmd) {
 	def cmds = []
 	def Integer cmdCount = 0
 
-    
 	cmdsGet += secureCmd(zwave.batteryV1.batteryGet())
 	if (device.currentValue("syncStatus") != "synced") {
 		parameterMap.each {
@@ -141,9 +140,9 @@ def zwaveEvent(hubitat.zwave.commands.wakeupv1.WakeUpNotification cmd) {
 		sendEvent(name: "syncStatus", value: "inProgress")
 		runIn((5+cmdCount*1.5).toInteger(), "syncCheck")
 	}
+    
 	cmds = cmdsSet + cmdsGet
 	sendHubCommand(new hubitat.device.HubMultiAction(delayBetween(cmds,500), hubitat.device.Protocol.ZWAVE))
-
 }
 
 def zwaveEvent(hubitat.zwave.commands.configurationv2.ConfigurationReport cmd) {
@@ -197,8 +196,7 @@ def zwaveEvent(hubitat.zwave.commands.centralscenev1.CentralSceneNotification cm
 	/* buttons:
 		1-6		Single Presses, Double Presses, Hold, Release
 		7-12	Sequences
-		12-18	Tripple Presses
-	*/
+		12-18	Tripple Presses */
     mappedButton = realButton
     switch (keyAttribute) {
         case 0: action = "pushed"; break
@@ -218,7 +216,7 @@ void zwaveEvent(hubitat.zwave.Command cmd){
     logging "warn", "unhandled zwaveEvent: ${cmd}"
 }
 
-private secureCmd(cmd) { //zwave secure encapsulation
+def secureCmd(cmd) { //zwave secure encapsulation
     logging "debug", "secureCmd: ${cmd}"
     if (getDataValue("zwaveSecurePairingComplete") == "true") {
 		return zwave.securityV1.securityMessageEncapsulation().encapsulate(cmd).format()
@@ -291,7 +289,6 @@ def seqToValue(sequence) { //convert sequence to value
 	(0..size-1).each{ n ->
 			result = result + ((sequence[n] as Integer) * (8**n))
 	}
-    
 	return result
 }
 
@@ -311,19 +308,11 @@ def btnTimToValue () { //convert lockTim and lockBtn to value
 def syncCheck() { //check if sync is complete
     logging "debug", "syncCheck"
 	def Integer count = 0
-	if (device.currentValue("syncStatus") != "synced") {
-		parameterMap.each {
-            if (state."${it.key}".state == "notSynced" ) {
-				count = count + 1
-			} 
-		}
-	}
+	if (device.currentValue("syncStatus") != "synced") { parameterMap.each { if (state."${it.key}".state == "notSynced" ) {count = count + 1} } }
 	if (state.protection.state != "synced") { count = count + 1 }
 	if (count == 0) {
 		sendEvent(name: "syncStatus", value: "synced")
 	} else {
-		if (device.currentValue("syncStatus") != "failed") {
-			sendEvent(name: "syncStatus", value: "incomplete")
-		}
+		if (device.currentValue("syncStatus") != "failed") { sendEvent(name: "syncStatus", value: "incomplete") }
 	}
 }
