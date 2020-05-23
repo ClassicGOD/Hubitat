@@ -43,23 +43,22 @@ import groovy.transform.Field
 ] 
 
 metadata {
-    definition (name: "Fibaro KeyFob",namespace: "ClassicGOD", author: "Artur Draga") {
+	definition (name: "Fibaro KeyFob",namespace: "ClassicGOD", author: "Artur Draga") {
 		capability "Actuator"
 		capability "Battery"
 		capability "PushableButton"
-        capability "DoubleTapableButton"
-        capability "HoldableButton"
-        capability "ReleasableButton"
-		//capability "Configuration"
+		capability "DoubleTapableButton"
+		capability "HoldableButton"
+		capability "ReleasableButton"
 
-        attribute "batteryStatus", "string"
-        attribute "syncStatus", "string"
+		attribute "batteryStatus", "string"
+		attribute "syncStatus", "string"
    
-        fingerprint deviceId: "4096" , inClusters: "0x5E,0x85,0x59,0x80,0x5B,0x70,0x56,0x5A,0x7A,0x72,0x8E,0x73,0x98,0x86,0x84,0x75,0x22", mfr: "0271", prod: "4097", deviceJoinName: "Fibaro KeyFob"
+		fingerprint deviceId: "4096" , inClusters: "0x5E,0x85,0x59,0x80,0x5B,0x70,0x56,0x5A,0x7A,0x72,0x8E,0x73,0x98,0x86,0x84,0x75,0x22", mfr: "0271", prod: "4097", deviceJoinName: "Fibaro KeyFob"
 		fingerprint deviceId: "4096" , inClusters: "0x5E,0x85,0x59,0x80,0x5B,0x70,0x56,0x5A,0x7A,0x72,0x8E,0x73,0x86,0x84,0x75,0x22", mfr: "0271", prod: "4097", deviceJoinName: "Fibaro KeyFob"
-    }
+	}
 
-    preferences {
+	preferences {
 		input name: "protection", title: "Protection State", type: "enum", options: [0: "Unprotected", 1: "Protection by sequence"], required: false
 		input name: "unlockSeq", type: "number", title: "Unlocking Sequence:", required: false
 		input name: "lockTim", type: "number", title: "Time To Lock", required: false
@@ -68,7 +67,7 @@ metadata {
 		parameterMap.findAll( {it.key.contains('seq')} ).each {
 			input name: it.key, title: it.descr, type: "number", required: false			
 		}
-        
+		
 		parameterMap.findAll( {it.key.contains('btn')} ).each {
 			input (
 				name: it.key,
@@ -94,10 +93,10 @@ metadata {
 				required: false
 			)
 		}
-        
-        input name: "debugEnable", type: "bool", title: "Enable debug logging", defaultValue: true
-        input name: "infoEnable", type: "bool", title: "Enable descriptionText logging", defaultValue: true
-    }
+		
+		input name: "debugEnable", type: "bool", title: "Enable debug logging", defaultValue: true
+		input name: "infoEnable", type: "bool", title: "Enable descriptionText logging", defaultValue: true
+	}
 }
 
 /*
@@ -106,16 +105,16 @@ metadata {
 ######################
 */
 void parse(String description){
-    logging "debug", "parse: ${description}"
-    hubitat.zwave.Command cmd = zwave.parse(description,commandClassVersions)
-    if (cmd) {
-        zwaveEvent(cmd)
-    }
+	logging "debug", "parse: ${description}"
+	hubitat.zwave.Command cmd = zwave.parse(description,commandClassVersions)
+	if (cmd) {
+		zwaveEvent(cmd)
+	}
 }
 
 def zwaveEvent(hubitat.zwave.commands.wakeupv1.WakeUpNotification cmd) {
-    logging "debug", "WakeUpNotification: ${cmd}"
-    logging "info", "woke up"
+	logging "debug", "WakeUpNotification: ${cmd}"
+	logging "info", "woke up"
 	def cmdsSet = []
 	def cmdsGet = []
 	def cmds = []
@@ -124,14 +123,14 @@ def zwaveEvent(hubitat.zwave.commands.wakeupv1.WakeUpNotification cmd) {
 	cmdsGet += secureCmd(zwave.batteryV1.batteryGet())
 	if (device.currentValue("syncStatus") != "synced") {
 		parameterMap.each {
-            if (state."${it.key}" == null) {state."${it.key}" = [value: null, state: "synced"]}
-            if (state."$it.key".value != null && state."${it.key}".state == "notSynced") {
+			if (state."${it.key}" == null) {state."${it.key}" = [value: null, state: "synced"]}
+			if (state."$it.key".value != null && state."${it.key}".state == "notSynced") {
 				cmdsSet += secureCmd(zwave.configurationV2.configurationSet(scaledConfigurationValue: state."${it.key}".value, parameterNumber: it.num , size: it.size))
 				cmdsGet += secureCmd(zwave.configurationV2.configurationGet(parameterNumber: it.num))
 				cmdCount = cmdCount + 1
 			}
 		}
-        if (state.protection == null) {state."${it.key}" = [value: null, state: "synced"]}
+		if (state.protection == null) {state."${it.key}" = [value: null, state: "synced"]}
 		if ( state.protection.value != null && state.protection.state == "notSynced") {
 			cmdsSet += secureCmd(zwave.protectionV1.protectionSet(protectionState: state.protection.value ))
 			cmdsGet += secureCmd(zwave.protectionV1.protectionGet())
@@ -140,24 +139,24 @@ def zwaveEvent(hubitat.zwave.commands.wakeupv1.WakeUpNotification cmd) {
 		sendEvent(name: "syncStatus", value: "inProgress")
 		runIn((5+cmdCount*1.5).toInteger(), "syncCheck")
 	}
-    
+	
 	cmds = cmdsSet + cmdsGet
 	sendHubCommand(new hubitat.device.HubMultiAction(delayBetween(cmds,500), hubitat.device.Protocol.ZWAVE))
 }
 
 def zwaveEvent(hubitat.zwave.commands.configurationv2.ConfigurationReport cmd) {
-    logging "debug", "ConfigurationReport: ${cmd}"
+	logging "debug", "ConfigurationReport: ${cmd}"
 	def paramData
 	paramData = parameterMap.find( {it.num == cmd.parameterNumber } )
-    if (state."${paramData.key}".value == cmd.scaledConfigurationValue) {
-        state."${paramData.key}".state = "synced"
+	if (state."${paramData.key}".value == cmd.scaledConfigurationValue) {
+		state."${paramData.key}".state = "synced"
 	}
-    logging "info", "parameter: ${cmd.parameterNumber} name: ${paramData.key} type: ${paramData.type} value: ${cmd.scaledConfigurationValue} state: ${state."${paramData.key}".state}"
+	logging "info", "parameter: ${cmd.parameterNumber} name: ${paramData.key} type: ${paramData.type} value: ${cmd.scaledConfigurationValue} state: ${state."${paramData.key}".state}"
 }
 
 def zwaveEvent(hubitat.zwave.commands.protectionv2.ProtectionReport cmd) {
-    logging "debug", "ProtectionReport: ${cmd}"
-    logging "info", "Protection set to: ${cmd.localProtectionState}"
+	logging "debug", "ProtectionReport: ${cmd}"
+	logging "info", "Protection set to: ${cmd.localProtectionState}"
 	if (state.protection.value == cmd.localProtectionState) {
 		state.protection.state = "synced"
 	}
@@ -169,25 +168,25 @@ def zwaveEvent(hubitat.zwave.commands.applicationstatusv1.ApplicationRejectedReq
 }
 
 def zwaveEvent(hubitat.zwave.commands.batteryv1.BatteryReport cmd) {
-    logging "debug", "BatteryReport: ${cmd}"
+	logging "debug", "BatteryReport: ${cmd}"
 	logging "info", "battery is $cmd.batteryLevel%"
 	sendEvent(name: "battery", value: cmd.batteryLevel)
 }
 
 def zwaveEvent(hubitat.zwave.commands.securityv1.SecurityMessageEncapsulation cmd) {
-    def encapCmd = cmd.encapsulatedCommand()
-    def result = []
-    if (encapCmd) {
-        logging "debug", "SecurityMessageEncapsulation: ${cmd}"
+	def encapCmd = cmd.encapsulatedCommand()
+	def result = []
+	if (encapCmd) {
+		logging "debug", "SecurityMessageEncapsulation: ${cmd}"
 		result += zwaveEvent(encapCmd)
-    } else {
-       logging "warn", "Unable to extract secure cmd from: ${cmd}"
-    }
-    return result
+	} else {
+	   logging "warn", "Unable to extract secure cmd from: ${cmd}"
+	}
+	return result
 }
 
 def zwaveEvent(hubitat.zwave.commands.centralscenev1.CentralSceneNotification cmd) {
-    logging "debug", "CentralSceneNotification: ${cmd}"
+	logging "debug", "CentralSceneNotification: ${cmd}"
 	def realButton = cmd.sceneNumber as Integer //1-6 physical, 7-12 sequences
 	def keyAttribute = cmd.keyAttributes as Integer
 	def Integer mappedButton
@@ -197,32 +196,32 @@ def zwaveEvent(hubitat.zwave.commands.centralscenev1.CentralSceneNotification cm
 		1-6		Single Presses, Double Presses, Hold, Release
 		7-12	Sequences
 		12-18	Tripple Presses */
-    mappedButton = realButton
-    switch (keyAttribute) {
-        case 0: action = "pushed"; break
-        case 1: action = "released"; break
-        case 2: action = "held"; break
-        case 3: action = "doubleTapped"; break
-        case 4: mappedButton = mappedButton + 12; action = "pushed"; break
-    }
-    
-    description = "button ${mappedButton} was ${action}" + ( keyAttribute == 4 ? " ( button ${realButton} trippletap )" : "" ) + ( realButton>6 ? " ( sequence ${realButton-6} executed )":"" )
+	mappedButton = realButton
+	switch (keyAttribute) {
+		case 0: action = "pushed"; break
+		case 1: action = "released"; break
+		case 2: action = "held"; break
+		case 3: action = "doubleTapped"; break
+		case 4: mappedButton = mappedButton + 12; action = "pushed"; break
+	}
+	
+	description = "button ${mappedButton} was ${action}" + ( keyAttribute == 4 ? " ( button ${realButton} trippletap )" : "" ) + ( realButton>6 ? " ( sequence ${realButton-6} executed )":"" )
    
-    logging "info", description
-    sendEvent(name:action, value:mappedButton, descriptionText: description, isStateChange:true, type:type)
+	logging "info", description
+	sendEvent(name:action, value:mappedButton, descriptionText: description, isStateChange:true, type:type)
 }
 
 void zwaveEvent(hubitat.zwave.Command cmd){
-    logging "warn", "unhandled zwaveEvent: ${cmd}"
+	logging "warn", "unhandled zwaveEvent: ${cmd}"
 }
 
 def secureCmd(cmd) { //zwave secure encapsulation
-    logging "debug", "secureCmd: ${cmd}"
-    if (getDataValue("zwaveSecurePairingComplete") == "true") {
+	logging "debug", "secureCmd: ${cmd}"
+	if (getDataValue("zwaveSecurePairingComplete") == "true") {
 		return zwave.securityV1.securityMessageEncapsulation().encapsulate(cmd).format()
-    } else {
+	} else {
 		return cmd.format()
-    }	
+	}	
 }
 
 /*
@@ -231,8 +230,8 @@ def secureCmd(cmd) { //zwave secure encapsulation
 #############################
 */
 void configure(){
-    logging "debug", "configure"
-    sendEvent(name: "numberOfButtons", value: 18)
+	logging "debug", "configure"
+	sendEvent(name: "numberOfButtons", value: 18)
 }
 
 void updated() {
@@ -248,11 +247,11 @@ void updated() {
 				case "mode":  tempValue = this[it.key] as Integer; break
 				case "number": tempValue = this[it.key]; break
 				}
-            if (state."${it.key}" == null) { state."${it.key}" = [value: null, state: "synced"] }
-            if (state."${it.key}".value != tempValue) {
+			if (state."${it.key}" == null) { state."${it.key}" = [value: null, state: "synced"] }
+			if (state."${it.key}".value != tempValue) {
 				syncRequired = 1
-                state."${it.key}".value = tempValue
-                state."${it.key}".state = "notSynced"
+				state."${it.key}".value = tempValue
+				state."${it.key}".state = "notSynced"
 			}
 		}
 	}
@@ -274,14 +273,14 @@ void updated() {
 ############
 */
 void logging(String type, String text) { //centralized logging
-    text = "${device.displayName}: " + text
-    if (debugEnable && type == "debug") log.debug text
-    if (infoEnable && type == "info") log.info text
-    if (type == "warn") log.warn text
+	text = "${device.displayName}: " + text
+	if (debugEnable && type == "debug") log.debug text
+	if (infoEnable && type == "info") log.info text
+	if (type == "warn") log.warn text
 }
 
 def seqToValue(sequence) { //convert sequence to value
-    logging "debug", "seqToValue"
+	logging "debug", "seqToValue"
 	sequence = sequence as String
 	def Integer size = sequence.length()
 	def Integer result = 0
@@ -293,7 +292,7 @@ def seqToValue(sequence) { //convert sequence to value
 }
 
 def btnTimToValue () { //convert lockTim and lockBtn to value
-    logging "debug", "btnTimToValue"
+	logging "debug", "btnTimToValue"
 	def Integer buttonVal
 	def Integer timeVal
 	def Integer tempValue
@@ -306,7 +305,7 @@ def btnTimToValue () { //convert lockTim and lockBtn to value
 }
 
 def syncCheck() { //check if sync is complete
-    logging "debug", "syncCheck"
+	logging "debug", "syncCheck"
 	def Integer count = 0
 	if (device.currentValue("syncStatus") != "synced") { parameterMap.each { if (state."${it.key}".state == "notSynced" ) {count = count + 1} } }
 	if (state.protection.state != "synced") { count = count + 1 }
