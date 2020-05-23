@@ -50,7 +50,7 @@ metadata {
         capability "DoubleTapableButton"
         capability "HoldableButton"
         capability "ReleasableButton"
-		capability "Configuration"
+		//capability "Configuration"
 
         attribute "batteryStatus", "string"
         attribute "syncStatus", "string"
