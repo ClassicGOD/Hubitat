@@ -19,7 +19,3 @@ def on() { parent.childOn() }
 def off() {	parent.childOff() }
 
 def toggle() { parent.childToggle() }
-
-//def reset() { parent.childReset() }
-
-//def refresh() { parent.childRefresh() }
