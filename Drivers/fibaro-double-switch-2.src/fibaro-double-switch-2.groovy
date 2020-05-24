@@ -50,7 +50,6 @@ def off() { secureCmd(endpointCmd(zwave.basicV1.basicSet(value: 0),1)) }
 def toggle() { device.currentValue("switch") != "on" ? on():off() }
 
 
-
 def childOn() { sendHubCommand(new hubitat.device.HubAction(secureCmd(endpointCmd(zwave.basicV1.basicSet(value: 255),2)), hubitat.device.Protocol.ZWAVE)) }
 
 def childOff() { sendHubCommand(new hubitat.device.HubAction(secureCmd(endpointCmd(zwave.basicV1.basicSet(value: 0),2)), hubitat.device.Protocol.ZWAVE)) }
@@ -433,6 +432,8 @@ private syncCheck() {
 			14: "key pressed 2, 3 times & held", 
 			15: "key pressed 1, 2, 3 times & held"
 		], def: "0", title: "Switch 2 - scenes sent"],
+ 	[key: "ch1powerReports", num: 50, size: 1, type: "number", def: 20, min: 0, max: 100, title: "First channel - power reports"],
+	[key: "ch1powerTime", num: 51, size: 1, type: "number", def: 10, min: 0, max: 120, title: "First channel - minimal time between power reports"],
 	[key: "ch1energyReports", num: 53, size: 2, type: "enum", options: [
 			1: "0.01 kWh",
 			10: "0.1 kWh",
@@ -441,6 +442,8 @@ private syncCheck() {
 			500: "5 kWh",
 			1000: "10 kWh"
 		], def: 100, min: 0, max: 32000, title: "First channel - energy reports"], 
+	[key: "ch2powerReports", num: 54, size: 1, type: "number", def: 20, min: 0, max: 100, title: "Second channel - power reports"],
+	[key: "ch2powerTime", num: 55, size: 1, type: "number", def: 10, min: 0, max: 120, title: "Second channel - minimal time between power reports"],
 	[key: "ch2energyReports", num: 57, size: 2, type: "enum", options: [
 			1: "0.01 kWh",
 			10: "0.1 kWh",
@@ -449,20 +452,10 @@ private syncCheck() {
 			500: "5 kWh",
 			1000: "10 kWh"
 		], def: 100, min: 0, max: 32000, title: "Second channel - energy reports"], 
-	[key: "periodicPowerReports", num: 58, size: 2, type: "enum", options: [
-			1: "1 s",
-			5: "5 s",
-			10: "10 s",
-			600: "600 s",
-			3600: "3600 s",
-			32000: "32000 s"
-		], def: 3600, min: 0, max: 32000, title: "Periodic power reports"], 
-	[key: "periodicEnergyReports", num: 59, size: 2, type: "enum", options: [
-			1: "1 s",
-			5: "5 s",
-			10: "10 s",
-			600: "600 s",
-			3600: "3600 s",
-			32000: "32000 s"
-		], def: 3600, min: 0, max: 32000, title: "Periodic energy reports"]
+	[key: "periodicPowerReports", num: 58, size: 2, type: "number", def: 3600, min: 0, max: 32000, title: "Periodic power reports"], 
+	[key: "periodicEnergyReports", num: 59, size: 2, type: "number", def: 3600, min: 0, max: 32000, title: "Periodic energy reports"],
+	[key: "mesureDevice", num: 60, size: 1, type: "enum", options: [
+			0: "function inactive", 
+			1: "function active"
+		], def: "0", title: "Measuring energy consumed by the device itself"]
 ]
