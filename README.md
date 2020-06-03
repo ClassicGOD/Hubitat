@@ -10,7 +10,6 @@ Hubitat provided and working:
 
 To be tested:
 - aeotec-hem-gen5.src
-- fibaro-dimmer-2.src (no scene or parameter support)
 - fibaro-flood-sensor.src
 - fibaro-heat-controller.src
 - fibaro-motion-sensor-zw5.src
@@ -18,6 +17,7 @@ To be tested:
 - fibaro-wall-plug-zw5.src
 
 Todo:
+- fibaro-dimmer-2.src (Hubitat provided has no scene, metering or parameter support)
 - fibaro-button.src
 - fibaro-co-sensor.src
 - fibaro-roller-shutter-2.src
