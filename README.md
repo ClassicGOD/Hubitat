@@ -10,7 +10,7 @@ Hubitat provided and working:
 
 To be tested:
 - aeotec-hem-gen5.src
-- fibaro-dimmer-2.src
+- fibaro-dimmer-2.src (no scene support)
 - fibaro-flood-sensor.src
 - fibaro-heat-controller.src
 - fibaro-motion-sensor-zw5.src
