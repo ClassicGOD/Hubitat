@@ -19,9 +19,9 @@ metadata {
 		capability "HoldableButton"
 		capability "ReleasableButton"
 		capability "Light"
+		capability "Refresh"
 		
 		command "toggle"
-		command "refresh"
 		command "clearError"
 		attribute "syncStatus", "string"
 		attribute "errorMode", "string"
