@@ -4,6 +4,7 @@ Done:
 - fibaro-double-switch-2.src
 - fibaro-keyfob.src
 - fibaro-single-switch-2.src (Hubitat provided is broken)
+- fibaro-dimmer-2.src (Hubitat provided has no scene, metering or parameter support)
 
 Hubitat provided and working:
 - fibaro-door-window-sensor-2.src
@@ -17,7 +18,6 @@ To be tested:
 - fibaro-wall-plug-zw5.src
 
 Todo:
-- fibaro-dimmer-2.src (Hubitat provided has no scene, metering or parameter support)
 - fibaro-button.src
 - fibaro-co-sensor.src
 - fibaro-roller-shutter-2.src
