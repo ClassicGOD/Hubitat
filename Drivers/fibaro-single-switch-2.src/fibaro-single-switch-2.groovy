@@ -39,7 +39,7 @@ metadata {
 		}
 
 		input name: "debugEnable", type: "bool", title: "Enable debug logging", defaultValue: true
-		input name: "infoEnable", type: "bool", title: "Enable descriptionText logging", defaultValue: true
+		input name: "infoEnable", type: "bool", title: "Enable info logging", defaultValue: true
 	}
 }
 
