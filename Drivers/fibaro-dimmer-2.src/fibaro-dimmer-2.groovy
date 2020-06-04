@@ -1,5 +1,5 @@
 /*
- *  Fibaro Single Switch 2
+ *  Fibaro Dimmer 2
  *
  *  Copyright 2020 Artur Draga
  *	
