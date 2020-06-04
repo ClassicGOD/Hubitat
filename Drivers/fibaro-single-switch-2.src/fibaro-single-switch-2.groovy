@@ -91,7 +91,7 @@ def zwaveEvent(hubitat.zwave.commands.basicv1.BasicSet cmd) { logging "debug", "
 
 def zwaveEvent(hubitat.zwave.commands.switchbinaryv1.SwitchBinaryReport cmd) {
 	logging "debug", "SwitchBinaryReport value: ${cmd.value}"
-	logging "info", "relay ${ep} ${(cmd.value == 0 ) ? "off": "on"}"
+	logging "info", "${(cmd.value == 0 ) ? "off": "on"}"
 	sendEvent([name: "switch", value: (cmd.value == 0 ) ? "off": "on"])
 }
 
@@ -128,8 +128,8 @@ def zwaveEvent(hubitat.zwave.commands.centralscenev1.CentralSceneNotification cm
 	sendEvent(name:action, value:mappedButton, descriptionText: description, isStateChange:true, type:type)
 }
 
-void zwaveEvent(hubitat.zwave.Command cmd, ep=null){
-	logging "warn", "unhandled zwaveEvent: ${cmd} ep: ${ep}"
+void zwaveEvent(hubitat.zwave.Command cmd){
+	logging "warn", "unhandled zwaveEvent: ${cmd}"
 }
 
 /*
