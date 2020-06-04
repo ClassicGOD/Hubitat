@@ -16,6 +16,7 @@ metadata {
 		capability "DoubleTapableButton"
 		capability "HoldableButton"
 		capability "ReleasableButton"
+		capability "Light"
 		
 		command "toggle"
 
@@ -24,7 +25,7 @@ metadata {
 		fingerprint deviceId: "4096" , inClusters: "0x5E,0x86,0x72,0x25,0x5A,0x59,0x85,0x73,0x56,0x70,0x32,0x8E,0x60,0x22,0x75,0x71,0x98,0x7A,0x5B", mfr: "0271", prod: "0515", deviceJoinName: "Fibaro Double Switch 2"
 		fingerprint deviceId: "4096" , inClusters: "0x5E,0x86,0x72,0x25,0x5A,0x59,0x85,0x73,0x56,0x70,0x32,0x8E,0x60,0x22,0x75,0x71,0x7A,0x5B", mfr: "0271", prod: "0515", deviceJoinName: "Fibaro Double Switch 2"
 	}
-
+	
 	preferences {
 		parameterMap.each {
 			input (
@@ -39,7 +40,7 @@ metadata {
 		}
 
 		input name: "debugEnable", type: "bool", title: "Enable debug logging", defaultValue: true
-		input name: "infoEnable", type: "bool", title: "Enable descriptionText logging", defaultValue: true
+		input name: "infoEnable", type: "bool", title: "Enable info logging", defaultValue: true
 	}
 }
 
@@ -49,12 +50,30 @@ def off() { secureCmd(endpointCmd(zwave.basicV1.basicSet(value: 0),1)) }
 
 def toggle() { device.currentValue("switch") != "on" ? on():off() }
 
-
 def childOn() { sendHubCommand(new hubitat.device.HubAction(secureCmd(endpointCmd(zwave.basicV1.basicSet(value: 255),2)), hubitat.device.Protocol.ZWAVE)) }
 
 def childOff() { sendHubCommand(new hubitat.device.HubAction(secureCmd(endpointCmd(zwave.basicV1.basicSet(value: 0),2)), hubitat.device.Protocol.ZWAVE)) }
 
 def childToggle() { getChildDevice("${device.deviceNetworkId}-2")?.currentValue("switch") != "on" ? childOn():childOff() }
+
+/*
+###################
+## Encapsulation ##
+###################
+*/
+def secureCmd(cmd) { //zwave secure encapsulation
+	logging "debug", "secureCmd: ${cmd}"
+	if (getDataValue("zwaveSecurePairingComplete") == "true") {
+		return zwave.securityV1.securityMessageEncapsulation().encapsulate(cmd).format()
+	} else {
+		return cmd.format()
+	}
+}
+
+def endpointCmd(cmd, ep) { //zwave MultiChannel Encap
+	logging "debug", "endpointCmd: ${cmd}"
+	return zwave.multiChannelV3.multiChannelCmdEncap(destinationEndPoint:ep).encapsulate(cmd)
+}
 
 /*
 ######################
@@ -67,13 +86,30 @@ void parse(String description){
 	if (cmd) { zwaveEvent(cmd) }
 }
 
-def zwaveEvent(hubitat.zwave.commands.basicv1.BasicReport cmd, ep=null) {
-	logging "debug", "(ignored) BasicReport: ${cmd} ep: ${ep}" //ignore
+def zwaveEvent(hubitat.zwave.commands.securityv1.SecurityMessageEncapsulation cmd) {
+	def encapCmd = cmd.encapsulatedCommand()
+	def result = []
+	if (encapCmd) {
+		logging "debug", "SecurityMessageEncapsulation: ${cmd}"
+		zwaveEvent(encapCmd)
+	} else {
+	   logging "warn", "Unable to extract secure cmd from: ${cmd}"
+	}
 }
 
-def zwaveEvent(hubitat.zwave.commands.basicv1.BasicSet cmd, ep=null) {
-	logging "debug", "(ignored) BasicSet: ${cmd} ep: ${ep}" //ignore
+def zwaveEvent(hubitat.zwave.commands.multichannelv3.MultiChannelCmdEncap cmd) {
+	def encapCmd = cmd.encapsulatedCommand()
+	if (encapCmd) {
+		logging "debug", "MultiChannelCmdEncap: ${cmd}"
+		zwaveEvent(encapCmd, cmd.sourceEndPoint as Integer)
+	} else {
+	   logging "warn", "Unable to extract multi channel cmd from: ${cmd}"
+	}
 }
+
+def zwaveEvent(hubitat.zwave.commands.basicv1.BasicReport cmd, ep=null) { logging "debug", "(ignored) BasicReport: ${cmd} ep: ${ep}" /*ignore*/ }
+
+def zwaveEvent(hubitat.zwave.commands.basicv1.BasicSet cmd, ep=null) { logging "debug", "(ignored) BasicSet: ${cmd} ep: ${ep}" /*ignore*/ }
 
 def zwaveEvent(hubitat.zwave.commands.switchbinaryv1.SwitchBinaryReport cmd, ep=null) {
 	logging "debug", "SwitchBinaryReport value: ${cmd.value} ep: $ep"
@@ -99,50 +135,11 @@ def zwaveEvent(hubitat.zwave.commands.meterv3.MeterReport cmd, ep=null) {
 	}
 }
 
-def zwaveEvent(hubitat.zwave.commands.configurationv2.ConfigurationReport cmd) {
-	logging "debug", "ConfigurationReport: ${cmd}"
-	def paramKey = parameterMap.find( {it.num == cmd.parameterNumber } ).key
-	logging "info", "Parameter ${paramKey} value is ${cmd.scaledConfigurationValue} expected " + state."$paramKey".value
-	state."$paramKey".state = (state."$paramKey".value == cmd.scaledConfigurationValue) ? "synced" : "incorrect"
-	syncNext()
-}
-
 def zwaveEvent(hubitat.zwave.commands.protectionv2.ProtectionReport cmd) {
 	logging "debug", "ProtectionReport: ${cmd}"
 	logging "info", "Protection set to: ${cmd.localProtectionState}"
 	if (state.protection.value == cmd.localProtectionState) {
 		state.protection.state = "synced"
-	}
-}
-
-def zwaveEvent(hubitat.zwave.commands.applicationstatusv1.ApplicationRejectedRequest cmd) {
-	logging "warn", "rejected onfiguration!"
-	for ( param in parameterMap ) {
-		if ( state."$param.key"?.state == "inProgress" ) {
-			state."$param.key"?.state = "failed"
-			break
-		} 
-	}
-}
-
-def zwaveEvent(hubitat.zwave.commands.securityv1.SecurityMessageEncapsulation cmd) {
-	def encapCmd = cmd.encapsulatedCommand()
-	def result = []
-	if (encapCmd) {
-		logging "debug", "SecurityMessageEncapsulation: ${cmd}"
-		zwaveEvent(encapCmd)
-	} else {
-	   logging "warn", "Unable to extract secure cmd from: ${cmd}"
-	}
-}
-
-def zwaveEvent(hubitat.zwave.commands.multichannelv3.MultiChannelCmdEncap cmd) {
-	def encapCmd = cmd.encapsulatedCommand()
-	if (encapCmd) {
-		logging "debug", "MultiChannelCmdEncap: ${cmd}"
-		zwaveEvent(encapCmd, cmd.sourceEndPoint as Integer)
-	} else {
-	   logging "warn", "Unable to extract multi channel cmd from: ${cmd}"
 	}
 }
 
@@ -153,7 +150,7 @@ def zwaveEvent(hubitat.zwave.commands.centralscenev1.CentralSceneNotification cm
 	def Integer mappedButton
 	def String action
 	def String description
-	/* buttons:
+	/*  buttons:
 		1-2	Single Presses, Double Presses, Hold, Release
 		3-4	Tripple Presses */
 	mappedButton = realButton
@@ -171,24 +168,6 @@ def zwaveEvent(hubitat.zwave.commands.centralscenev1.CentralSceneNotification cm
 	sendEvent(name:action, value:mappedButton, descriptionText: description, isStateChange:true, type:type)
 }
 
-void zwaveEvent(hubitat.zwave.Command cmd, ep=null){
-	logging "warn", "unhandled zwaveEvent: ${cmd} ep: ${ep}"
-}
-
-def secureCmd(cmd) { //zwave secure encapsulation
-	logging "debug", "secureCmd: ${cmd}"
-	if (getDataValue("zwaveSecurePairingComplete") == "true") {
-		return zwave.securityV1.securityMessageEncapsulation().encapsulate(cmd).format()
-	} else {
-		return cmd.format()
-	}	
-}
-
-def endpointCmd(cmd, ep) { //zwave MultiChannel Encap
-	logging "debug", "endpointCmd: ${cmd}"
-	return zwave.multiChannelV3.multiChannelCmdEncap(destinationEndPoint:ep).encapsulate(cmd)
-}
-
 def zwaveEvent(hubitat.zwave.commands.multichannelassociationv2.MultiChannelAssociationReport cmd) {
 	logging "debug",  "MultiChannelAssociationReport: ${cmd}"
 	def cmds = []
@@ -202,6 +181,68 @@ def zwaveEvent(hubitat.zwave.commands.multichannelassociationv2.MultiChannelAsso
 		}
 	}  
 	if (cmds) { sendHubCommand(new hubitat.device.HubMultiAction(delayBetween(cmds,500), hubitat.device.Protocol.ZWAVE)) }
+}
+
+void zwaveEvent(hubitat.zwave.Command cmd, ep=null){
+	logging "warn", "unhandled zwaveEvent: ${cmd} ep: ${ep}"
+}
+
+/*
+####################
+## Parameter Sync ##
+####################
+*/
+def zwaveEvent(hubitat.zwave.commands.configurationv2.ConfigurationReport cmd) {
+	logging "debug", "ConfigurationReport: ${cmd}"
+	def paramData = parameterMap.find( {it.num == cmd.parameterNumber } )
+	def previousVal = state."${paramData.key}".toString()
+	def expectedVal = this["${paramData.key}"].toString()
+	def receivedVal = cmd.scaledConfigurationValue.toString()
+	
+	logging "info", "Parameter ${paramData.key} value is ${receivedVal} expected ${expectedVal}"
+	if (previousVal == receivedVal && expectedVal == receivedVal) {
+		//ignore
+	} else if (expectedVal == receivedVal) {
+		logging "debug", "Parameter ${paramData.key} as expected"
+		state."${paramData.key}" = receivedVal
+		syncNext()
+	} else if (previousVal == receivedVal) {
+		logging "debug", "Parameter ${paramData.key} not changed - sync failed"
+		if (device.currentValue("syncStatus").contains("In progres")) { sendEvent(name: "syncStatus", value: "Wrong value on param ${paramData.num}") }
+	} else {
+		logging "debug", "Parameter ${paramData.key} new value"
+		device.updateSetting("${paramData.key}", [value:receivedVal, type: paramData.type])
+		state."${paramData.key}" = receivedVal
+	}  
+}
+
+def zwaveEvent(hubitat.zwave.commands.applicationstatusv1.ApplicationRejectedRequest cmd) {
+	logging "warn", "Rejected Configuration!"
+	for ( param in parameterMap ) {
+		if (state."$param.key".toString() != this["$param.key"].toString()) {
+			sendEvent(name: "syncStatus", value: "Rejected Request for parameter: ${param.num}")
+			break
+		}
+	}
+}
+
+private syncNext() {
+	logging "debug", "syncNext()"  
+	def cmds = []
+	for ( param in parameterMap ) {
+		if ( this["$param.key"] != null && state."$param.key".toString() != this["$param.key"].toString() ) {
+			cmds << secureCmd(zwave.configurationV2.configurationSet(scaledConfigurationValue: this["$param.key"].toInteger(), parameterNumber: param.num, size: param.size))
+			cmds << secureCmd(zwave.configurationV2.configurationGet(parameterNumber: param.num))
+			sendEvent(name: "syncStatus", value: "In progress (parameter: ${param.num})")
+			break
+		} 
+	}
+	if (cmds) { 
+		sendHubCommand(new hubitat.device.HubMultiAction(delayBetween(cmds,500), hubitat.device.Protocol.ZWAVE))
+	} else {
+		logging "info", "Sync Complete"  
+		if (device.currentValue("syncStatus").contains("In progress")) { sendEvent(name: "syncStatus", value: "Complete") }
+	}
 }
 
 /*
@@ -219,15 +260,15 @@ def updated() {
 	if (!childDevices) { createChildDevices() } 
 	if (device.currentValue("numberOfButtons") != 4) { sendEvent(name: "numberOfButtons", value: 4) }
 	
-	runIn(3,"syncStart")
+	runIn(3,"syncNext")
 	
 	return response(secureCmd(zwave.multiChannelAssociationV2.multiChannelAssociationGet(groupingIdentifier: 1))) //verify if group 1 association is correct
 }
 
 /*
-############
-## Custom ##
-############
+###########
+## Other ##
+###########
 */
 void logging(String type, String text) { //centralized logging
 	text = "${device.displayName}: " + text
@@ -244,73 +285,6 @@ private createChildDevices() {
 		"${device.deviceNetworkId}-2", 
 		[isComponent: false, name: "${device.displayName} (CH2)"]
 	)
-}
-
-private syncStart() {
-	logging "debug", "syncStart()"  
-	boolean syncNeeded = false
-	parameterMap.each {
-		if(this["$it.key"] != null) {
-			if (state."$it.key" == null) { state."$it.key" = [value: null, state: "synced"] }
-			if (state."$it.key".value != this["$it.key"] as Integer || state."$it.key".state in ["notSynced","inProgress"]) {
-				state."$it.key".value = this["$it.key"] as Integer
-				state."$it.key".state = "notSynced"
-				syncNeeded = true
-			}
-		}
-	}
-	if ( syncNeeded ) { 
-		logging "info", "starting sync"  
-		syncNext()
-	}
-}
-
-private syncNext() {
-	logging "debug", "syncNext()"  
-	def cmds = []
-	for ( param in parameterMap ) {
-		if ( state."$param.key"?.value != null && state."$param.key"?.state in ["notSynced","inProgress"] ) {
-			state."$param.key"?.state = "inProgress"
-			cmds << secureCmd(zwave.configurationV2.configurationSet(scaledConfigurationValue: state."$param.key".value, parameterNumber: param.num, size: param.size))
-			cmds << secureCmd(zwave.configurationV2.configurationGet(parameterNumber: param.num))
-			break
-		} 
-	}
-	if (cmds) { 
-		runIn(10, "syncCheck")
-		sendHubCommand(new hubitat.device.HubMultiAction(delayBetween(cmds,500), hubitat.device.Protocol.ZWAVE))
-	} else {
-		runIn(1, "syncCheck")
-	}
-}
-
-private syncCheck() {
-	logging "debug", "syncCheck()"  
-	def failed = []
-	def incorrect = []
-	def notSynced = []
-	parameterMap.each {
-		if (state."$it.key"?.state == "incorrect" ) {
-			incorrect << it
-		} else if ( state."$it.key"?.state == "failed" ) {
-			failed << it
-		} else if ( state."$it.key"?.state in ["inProgress","notSynced"] ) {
-			notSynced << it
-		}
-	}
-	if (failed) {
-		logging "info", "Sync failed! Check parameter: ${failed[0].num}"
-		sendEvent(name: "syncStatus", value: "failed")
-	} else if (incorrect) {
-		logging "info", "Sync mismatch! Check parameter: ${incorrect[0].num}"
-		sendEvent(name: "syncStatus", value: "incomplete")
-	} else if (notSynced) {
-		logging "info", "Sync incomplete!"
-		sendEvent(name: "syncStatus", value: "incomplete")
-	} else {
-		logging "info", "Sync Complete"
-		sendEvent(name: "syncStatus", value: "synced")
-	}
 }
 
 /*
