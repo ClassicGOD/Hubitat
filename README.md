@@ -6,6 +6,7 @@ Done:
 - fibaro-single-switch-2.src (Hubitat provided is broken)
 - fibaro-dimmer-2.src (Hubitat provided has no scene, metering or parameter support)
 - aeotec-hem-gen5.src
+- fibaro-wall-plug-zw5.src (Hubitat provided seems to be working but is missing some parameters that I need)
 
 Hubitat provided and working:
 - fibaro-door-window-sensor-2.src
@@ -21,4 +22,3 @@ Todo:
 - fibaro-co-sensor.src
 - fibaro-roller-shutter-2.src
 - fibaro-swipe.src
-- fibaro-wall-plug-zw5.src (Hubitat provided seems to be working but is missing some parameters that I need)
