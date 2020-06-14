@@ -15,11 +15,10 @@ To be tested:
 - fibaro-flood-sensor.src
 - fibaro-heat-controller.src
 - fibaro-rgbw-controller.src
-- fibaro-wall-plug-zw5.src
 
 Todo:
 - fibaro-button.src
 - fibaro-co-sensor.src
 - fibaro-roller-shutter-2.src
 - fibaro-swipe.src
-
+- fibaro-wall-plug-zw5.src (Hubitat provided seems to be working but is missing some parameters that I need)
