@@ -9,11 +9,11 @@ Done:
 
 Hubitat provided and working:
 - fibaro-door-window-sensor-2.src
+- fibaro-motion-sensor-zw5.src (seems to be working fine)
 
 To be tested:
 - fibaro-flood-sensor.src
 - fibaro-heat-controller.src
-- fibaro-motion-sensor-zw5.src
 - fibaro-rgbw-controller.src
 - fibaro-wall-plug-zw5.src
 
