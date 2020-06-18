@@ -7,6 +7,8 @@ Done:
 - fibaro-dimmer-2.src (Hubitat provided has no scene, metering or parameter support)
 - aeotec-hem-gen5.src
 - fibaro-wall-plug-zw5.src (Hubitat provided seems to be working but is missing some parameters that I need)
+- fibaro-rgbw-controller.src (Hubitat provided seems to be working but is missing some features that I need)
+- fibaro-smoke-sensor.src
 
 Hubitat provided and working:
 - fibaro-door-window-sensor-2.src
@@ -15,7 +17,6 @@ Hubitat provided and working:
 To be tested:
 - fibaro-flood-sensor.src
 - fibaro-heat-controller.src
-- fibaro-rgbw-controller.src
 
 Todo:
 - fibaro-button.src
