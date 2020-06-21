@@ -1,8 +1,8 @@
 
 /*
- *  Aeotec Home Energy Meter Gen 5
+ *	Aeotec Home Energy Meter Gen 5
  *
- *  Copyright 2020 Artur Draga
+ *	Copyright 2020 Artur Draga
  *	
  *
  */
@@ -15,7 +15,7 @@ metadata {
 		capability "Voltage Measurement"
 		capability "Refresh"
 
-		command "resetEnergyAll"
+		command "resetEnergy"
 		
 		attribute "syncStatus", "string"
 		attribute "current", "number"
@@ -42,42 +42,23 @@ metadata {
 		input name: "infoEnable", type: "bool", title: "Enable info logging", defaultValue: true}
 }
 
-def refresh() { 
+def refresh(Integer ep = null) { 
 	def cmds = []
-	cmds << secureCmd(zwave.meterV3.meterGet(scale: 0))
-	cmds << secureCmd(zwave.meterV3.meterGet(scale: 2))
-	cmds << secureCmd(zwave.meterV3.meterGet(scale: 4))
-	cmds << secureCmd(zwave.meterV3.meterGet(scale: 5))
+	cmds << encapCmd(zwave.meterV3.meterGet(scale: 0),ep)
+	cmds << encapCmd(zwave.meterV3.meterGet(scale: 2),ep)
+	cmds << encapCmd(zwave.meterV3.meterGet(scale: 4),ep)
+	cmds << encapCmd(zwave.meterV3.meterGet(scale: 5),ep)
 	delayBetween(cmds,1000)
 }
 
-def refreshChild(dni) { 
-	Integer ep = (dni-"${device.deviceNetworkId}-") as Integer
+def resetEnergy(Integer ep = null) {
 	def cmds = []
-	cmds << secureCmd(endpointCmd(zwave.meterV3.meterGet(scale: 0),ep))
-	cmds << secureCmd(endpointCmd(zwave.meterV3.meterGet(scale: 2),ep))
-	cmds << secureCmd(endpointCmd(zwave.meterV3.meterGet(scale: 4),ep))
-	cmds << secureCmd(endpointCmd(zwave.meterV3.meterGet(scale: 5),ep))
-	sendHubCommand(new hubitat.device.HubMultiAction(delayBetween(cmds,1000), hubitat.device.Protocol.ZWAVE))
-}
-
-def resetEnergyAll() {
-	def cmds = []
-	cmds << secureCmd(zwave.meterV3.meterReset())
-	cmds << secureCmd(zwave.meterV3.meterGet(scale: 0))
-	cmds << secureCmd(endpointCmd(zwave.meterV3.meterGet(scale: 0),1))
-	cmds << secureCmd(endpointCmd(zwave.meterV3.meterGet(scale: 0),2))
-	cmds << secureCmd(endpointCmd(zwave.meterV3.meterGet(scale: 0),3))
+	cmds << encapCmd(zwave.meterV3.meterReset(),ep)
+	cmds << encapCmd(zwave.meterV3.meterGet(scale: 0))
+	cmds << encapCmd(zwave.meterV3.meterGet(scale: 0),1)
+	cmds << encapCmd(zwave.meterV3.meterGet(scale: 0),2)
+	cmds << encapCmd(zwave.meterV3.meterGet(scale: 0),3)
 	delayBetween(cmds,1000)
-}
-
-def resetEnergyChild(dni) {
-	Integer ep = (dni-"${device.deviceNetworkId}-") as Integer
-	def cmds = []
-	cmds << secureCmd(endpointCmd(zwave.meterV3.meterReset(),ep))
-	cmds << secureCmd(endpointCmd(zwave.meterV3.meterGet(scale: 0),ep))
-	cmds << secureCmd(zwave.meterV3.meterGet(scale: 0))
-	sendHubCommand(new hubitat.device.HubMultiAction(delayBetween(cmds,1000), hubitat.device.Protocol.ZWAVE))
 }
 
 /*
@@ -85,61 +66,47 @@ def resetEnergyChild(dni) {
 ## Encapsulation ##
 ###################
 */
-
-def secureCmd(cmd) { //zwave secure encapsulation
-	logging "debug", "secureCmd: ${cmd}"
-	if (getDataValue("zwaveSecurePairingComplete") == "true") {
-		return zwave.securityV1.securityMessageEncapsulation().encapsulate(cmd).format()
-	} else {
-		return cmd.format()
-	}
+def encapCmd(hubitat.zwave.Command cmd, Integer ep=null) { 
+	logging "encapCmd: ${cmd} ep: ${ep}"
+	if (ep != null) cmd = zwave.multiChannelV3.multiChannelCmdEncap(destinationEndPoint: ep).encapsulate(cmd) 
+	if (getDataValue("zwaveSecurePairingComplete") == "true") cmd = zwave.securityV1.securityMessageEncapsulation().encapsulate(cmd) 
+	return cmd.format()
 }
 
-def endpointCmd(cmd, ep) { //zwave MultiChannel Encap
-	logging "debug", "endpointCmd: ${cmd}"
-	return zwave.multiChannelV3.multiChannelCmdEncap(destinationEndPoint:ep).encapsulate(cmd)
-}
-
+/*
+######################
+## Parse and events ##
+######################
+*/
 void parse(String description){
-	logging "debug", "parse: ${description}"
+	logging "parse: ${description}"
 	hubitat.zwave.Command cmd = zwave.parse(description,commandClassVersions)
-	if (cmd) { zwaveEvent(cmd) }
+	if (cmd) zwaveEvent(cmd)
 }
 
 def zwaveEvent(hubitat.zwave.commands.securityv1.SecurityMessageEncapsulation cmd) {
+	logging "SecurityMessageEncapsulation: ${cmd}"
 	def encapCmd = cmd.encapsulatedCommand()
-	def result = []
-	if (encapCmd) {
-		logging "debug", "SecurityMessageEncapsulation: ${cmd}"
-		zwaveEvent(encapCmd)
-	} else {
-	   logging "warn", "Unable to extract secure cmd from: ${cmd}"
-	}
-}
-
-def zwaveEvent(hubitat.zwave.commands.multichannelv3.MultiChannelCmdEncap cmd) {
-	def encapCmd = cmd.encapsulatedCommand()
-	if (encapCmd) {
-		logging "debug", "MultiChannelCmdEncap: ${cmd}"
-		zwaveEvent(encapCmd, cmd.sourceEndPoint as Integer)
-	} else {
-	   logging "warn", "Unable to extract multi channel cmd from: ${cmd}"
-	}
+	if (encapCmd) zwaveEvent(encapCmd)
+	else logging "Unable to extract secure cmd from: ${cmd}", "warn"
 }
 
 def zwaveEvent(hubitat.zwave.commands.crc16encapv1.Crc16Encap cmd) {
+	logging "Crc16Encap: ${cmd}"
 	def encapCmd = zwave.getCommand(cmd.commandClass, cmd.command, cmd.data, commandClassVersions[cmd.commandClass as Integer]?: 1)
-	if (encapCmd) {
-		logging "debug", "Crc16Encap: ${cmd}"
-		zwaveEvent(encapCmd)
-	} else {
-	   logging "warn", "Unable to extract Crc16Encap cmd from: ${cmd}"
-	}
+	if (encapCmd) zwaveEvent(encapCmd)
+	else logging "Unable to extract Crc16Encap cmd from: ${cmd}", "warn"
 }
 
-def zwaveEvent(hubitat.zwave.commands.meterv3.MeterReport cmd, ep=null) {
-	logging "debug", "MeterReport value: ${cmd.scaledMeterValue} scale: ${cmd.scale} ep: $ep"
-	
+def zwaveEvent(hubitat.zwave.commands.multichannelv3.MultiChannelCmdEncap cmd) {
+	logging "MultiChannelCmdEncap: ${cmd}"
+	def encapCmd = cmd.encapsulatedCommand()
+	if (encapCmd) zwaveEvent(encapCmd, cmd.sourceEndPoint as Integer)
+	else logging "Unable to extract multi channel cmd from: ${cmd}", "warn"
+}
+
+def zwaveEvent(hubitat.zwave.commands.meterv3.MeterReport cmd, Integer ep=null) {
+	logging "MeterReport value: ${cmd.scaledMeterValue} scale: ${cmd.scale} ep: $ep"
 	switch (cmd.scale) {
 		case 0: type = "energy"; unit = "kWh"; break; 
 		case 1: type = "totalEnergy"; unit = "kVAh"; break;
@@ -147,19 +114,11 @@ def zwaveEvent(hubitat.zwave.commands.meterv3.MeterReport cmd, ep=null) {
 		case 4: type = "voltage"; unit = "V"; break;
 		case 5: type = "current"; unit = "A"; break;
 	}
-	
-	if (ep == null) {
-		sendEvent([name: type, value: cmd.scaledMeterValue, unit: unit])
-	} else {
-		getChildDevice("${device.deviceNetworkId}-${ep}")?.sendEvent([name: type, value: cmd.scaledMeterValue, unit: unit]) 
-	}
+	if (ep == null) sendEvent([name: type, value: cmd.scaledMeterValue, unit: unit])
+	else getChildDevice("${device.deviceNetworkId}-${ep}")?.sendEvent([name: type, value: cmd.scaledMeterValue, unit: unit]) 
 }
 
-void zwaveEvent(hubitat.zwave.Command cmd, ep=null){
-	logging "warn", "unhandled zwaveEvent: ${cmd} ep: ${ep}"
-	
-
-}
+void zwaveEvent(hubitat.zwave.Command cmd, Integer ep=null){ logging "unhandled zwaveEvent: ${cmd} ep: ${ep}", "warn" }
 
 /*
 ########################
@@ -167,8 +126,7 @@ void zwaveEvent(hubitat.zwave.Command cmd, ep=null){
 ########################
 */
 def zwaveEvent(hubitat.zwave.commands.multichannelv3.MultiChannelEndPointReport cmd) {
-	logging "debug",  "MultiChannelEndPointReport: dynamic: ${cmd.dynamic} endPoints: ${cmd.endPoints} identical: ${cmd.identical}"
-	
+	logging "MultiChannelEndPointReport: dynamic: ${cmd.dynamic} endPoints: ${cmd.endPoints} identical: ${cmd.identical}"
 	if ( !childDevices && cmd.endPoints > 1 ) {
 		(1..cmd.endPoints).each() {
 			addChildDevice(
@@ -182,55 +140,54 @@ def zwaveEvent(hubitat.zwave.commands.multichannelv3.MultiChannelEndPointReport 
 }
 
 def zwaveEvent(hubitat.zwave.commands.configurationv2.ConfigurationReport cmd) {
-	logging "debug", "ConfigurationReport: ${cmd}"
+	logging "ConfigurationReport: ${cmd}"
 	def paramData = parameterMap.find( {it.num == cmd.parameterNumber } )
 	def previousVal = state."${paramData.key}".toString()
 	def expectedVal = this["${paramData.key}"].toString()
 	def receivedVal = cmd.scaledConfigurationValue.toString()
 	
-	logging "info", "Parameter ${paramData.key} value is ${receivedVal} expected ${expectedVal}"
-	if (previousVal == receivedVal && expectedVal == receivedVal) {
-		//ignore
+	logging "Parameter ${paramData.key} value is ${receivedVal} expected ${expectedVal}", "info"
+	if (previousVal == receivedVal && expectedVal == receivedVal) { //ignore
 	} else if (expectedVal == receivedVal) {
-		logging "debug", "Parameter ${paramData.key} as expected"
+		logging "Parameter ${paramData.key} as expected"
 		state."${paramData.key}" = receivedVal
 		syncNext()
 	} else if (previousVal == receivedVal) {
-		logging "debug", "Parameter ${paramData.key} not changed - sync failed"
-		if (device.currentValue("syncStatus").contains("In progres")) { sendEvent(name: "syncStatus", value: "Wrong value on param ${paramData.num}") }
+		logging "Parameter ${paramData.key} not changed - sync failed"
+		if (device.currentValue("syncStatus").contains("in progres")) { sendEvent([name: "syncStatus", value: "wrong value on param ${paramData.num}"]) }
 	} else {
-		logging "debug", "Parameter ${paramData.key} new value"
+		logging "Parameter ${paramData.key} new value"
 		device.updateSetting("${paramData.key}", [value:receivedVal, type: paramData.type])
 		state."${paramData.key}" = receivedVal
-	}  
+	}
 }
 
 def zwaveEvent(hubitat.zwave.commands.applicationstatusv1.ApplicationRejectedRequest cmd) {
-	logging "warn", "Rejected Configuration!"
+	logging "Rejected Configuration!", "warn"
 	for ( param in parameterMap ) {
 		if (state."$param.key".toString() != this["$param.key"].toString()) {
-			sendEvent(name: "syncStatus", value: "Rejected Request for parameter: ${param.num}")
+			sendEvent(name: "syncStatus", value: "rejected request for parameter: ${param.num}")
 			break
 		}
 	}
 }
 
 private syncNext() {
-	logging "debug", "syncNext()"  
+	logging "syncNext()"
 	def cmds = []
 	for ( param in parameterMap ) {
 		if ( this["$param.key"] != null && state."$param.key".toString() != this["$param.key"].toString() ) {
-			cmds << secureCmd(zwave.configurationV2.configurationSet(scaledConfigurationValue: this["$param.key"].toInteger(), parameterNumber: param.num, size: param.size))
-			cmds << secureCmd(zwave.configurationV2.configurationGet(parameterNumber: param.num))
-			sendEvent(name: "syncStatus", value: "In progress (parameter: ${param.num})")
+			cmds << encapCmd(zwave.configurationV2.configurationSet(scaledConfigurationValue: this["$param.key"].toInteger(), parameterNumber: param.num, size: param.size))
+			cmds << encapCmd(zwave.configurationV2.configurationGet(parameterNumber: param.num))
+			sendEvent([name: "syncStatus", value: "in progress (parameter: ${param.num})"])
 			break
 		} 
 	}
 	if (cmds) { 
 		sendHubCommand(new hubitat.device.HubMultiAction(delayBetween(cmds,500), hubitat.device.Protocol.ZWAVE))
 	} else {
-		logging "info", "Sync Complete"  
-		if (device.currentValue("syncStatus").contains("In progress")) { sendEvent(name: "syncStatus", value: "Complete") }
+		logging "Sync End", "info"
+		if (device.currentValue("syncStatus").contains("in progress")) { sendEvent(name: "syncStatus", value: "complete") }
 	}
 }
 
@@ -240,9 +197,9 @@ private syncNext() {
 #############################
 */
 def updated() {
-	logging "debug", "updated"
+	logging "updated"
 	runIn(3,"syncNext")
-	return response(secureCmd(zwave.multiChannelV4.multiChannelEndPointGet())) //check how many endpoints/clamps
+	return response(encapCmd(zwave.multiChannelV4.multiChannelEndPointGet()))
 }
 
 /*
@@ -250,36 +207,30 @@ def updated() {
 ## Other ##
 ###########
 */
-void logging(String type, String text) { //centralized logging
-	text = "${device.displayName}: " + text
-	if ((debugEnable || debugEnable == null) && type == "debug") log.debug text
-	if ((infoEnable || infoEnable == null) && type == "info") log.info text
-	if (type == "warn") log.warn text
-}
+void logging(String text, String type = "debug") { if ( this["${type}Enable"] || this["${type}Enable"] == null ) log."${type}" text } 
 
 /*
 ###################
 ## Device config ##
 ###################
 */
-
-@Field static Map commandClassVersions = [0x5E: 2, 0x86: 1, 0x72: 1, 0x32: 3, 0x56: 1, 0x60: 3, 0x8E: 2, 0x70: 2, 0x59: 1, 0x85: 2, 0x7A: 2, 0x73: 1, 0x5A: 1, 0x98: 1] //Aeotec Home Energy Meter Gen 5
+@Field static Map commandClassVersions = [0x5E: 2, 0x86: 1, 0x72: 1, 0x32: 3, 0x56: 1, 0x60: 3, 0x8E: 2, 0x70: 2, 0x59: 1, 0x85: 2, 0x7A: 2, 0x73: 1, 0x5A: 1, 0x98: 1]
 
 @Field static parameterMap = [
-	[key: "reportingThreshold", num: 3, size: 1, type: "enum", options: [0: "0 - disable", 1: "1 - enable"], def: "1", title: "Reporting Threshold"],
-	[key: "thresholdHEM", num: 4, size: 2, type: "number", def: 50, min: 0, max: 60000, title: "HEM threshold"], 
-	[key: "thresholdClamp1", num: 5, size: 2, type: "number", def: 50, min: 0, max: 60000, title: "Clamp 1 threshold"], 
-	[key: "thresholdClamp2", num: 6, size: 2, type: "number", def: 50, min: 0, max: 60000, title: "Clamp 2 threshold"], 
-	[key: "thresholdClamp3", num: 7, size: 2, type: "number", def: 50, min: 0, max: 60000, title: "Clamp 3 threshold"], 
-	[key: "percentageHEM", num: 8, size: 1, type: "number", def: 10, min: 0, max: 100, title: "HEM percentage"], 
-	[key: "percentageClamp1", num: 9, size: 1, type: "number", def: 10, min: 0, max: 100, title: "Clamp 1 percentage"], 
-	[key: "percentageClamp2", num: 10, size: 1, type: "number", def: 10, min: 0, max: 100, title: "Clamp 2 percentage"], 
-	[key: "percentageClamp3", num: 11, size: 1, type: "number", def: 10, min: 0, max: 100, title: "Clamp 3 percentage"],
-	[key: "crcReporting", num: 13, size: 1, type: "enum", options: [0: "0 - disable", 1: "1 - enable"], def: "0", title: "CRC-16 reporting"],
-	[key: "group1", num: 101, size: 4, type: "number", def: 2, min: 0, max: 4210702, title: "Group 1"],
-	[key: "group2", num: 102, size: 4, type: "number", def: 1, min: 0, max: 4210702, title: "Group 2"],
-	[key: "group3", num: 103, size: 4, type: "number", def: 0, min: 0, max: 4210702, title: "Group 3"],
-	[key: "timeGroup1", num: 111, size: 4, type: "number", def: 5, min: 0, max: 268435456, title: "Group 1 time interval"],
-	[key: "timeGroup2", num: 112, size: 4, type: "number", def: 120, min: 0, max: 268435456, title: "Group 2 time interval"],
-	[key: "timeGroup3", num: 113, size: 4, type: "number", def: 120, min: 0, max: 268435456, title: "Group 3 time interval"]
+	[key: "reportingThreshold", title: "Reporting Threshold", type: "enum", options: [0: "0 - disable", 1: "1 - enable"], num: 3, size: 1, def: 1, min: 0, max: 1],
+	[key: "thresholdHEM", title: "HEM threshold", type: "number", num: 4, size: 2, def: 50, min: 0, max: 60000], 
+	[key: "thresholdClamp1", title: "Clamp 1 threshold", type: "number", num: 5, size: 2, def: 50, min: 0, max: 60000], 
+	[key: "thresholdClamp2", title: "Clamp 2 threshold", type: "number", num: 6, size: 2, def: 50, min: 0, max: 60000], 
+	[key: "thresholdClamp3", title: "Clamp 3 threshold", type: "number", num: 7, size: 2, def: 50, min: 0, max: 60000], 
+	[key: "percentageHEM", title: "HEM percentage", type: "number", num: 8, size: 1, def: 10, min: 0, max: 100], 
+	[key: "percentageClamp1", title: "Clamp 1 percentage", type: "number", num: 9, size: 1, def: 10, min: 0, max: 100], 
+	[key: "percentageClamp2", title: "Clamp 2 percentage", type: "number", num: 10, size: 1, def: 10, min: 0, max: 100], 
+	[key: "percentageClamp3", title: "Clamp 3 percentage", type: "number", num: 11, size: 1, def: 10, min: 0, max: 100],
+	[key: "crcReporting", title: "CRC-16 reporting", type: "enum", options: [0: "0 - disable", 1: "1 - enable"], num: 13, size: 1, def: 0, min: 0, max: 1],
+	[key: "group1", title: "Group 1", type: "number", num: 101, size: 4, def: 2, min: 0, max: 4210702],
+	[key: "group2", title: "Group 2", type: "number", num: 102, size: 4, def: 1, min: 0, max: 4210702],
+	[key: "group3", title: "Group 3", type: "number", num: 103, size: 4, def: 0, min: 0, max: 4210702],
+	[key: "timeGroup1", title: "Group 1 time interval", type: "number", num: 111, size: 4, def: 5, min: 0, max: 268435456],
+	[key: "timeGroup2", title: "Group 2 time interval", type: "number", num: 112, size: 4, def: 120, min: 0, max: 268435456],
+	[key: "timeGroup3", title: "Group 3 time interval", type: "number", num: 113, size: 4, def: 120, min: 0, max: 268435456]
 ]
