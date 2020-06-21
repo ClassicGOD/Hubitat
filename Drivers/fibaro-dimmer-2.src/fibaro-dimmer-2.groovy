@@ -1,7 +1,7 @@
 /*
- *  Fibaro Dimmer 2
+ *	Fibaro Dimmer 2
  *
- *  Copyright 2020 Artur Draga
+ *	Copyright 2020 Artur Draga
  *	
  *
  */
@@ -26,8 +26,7 @@ metadata {
 		attribute "syncStatus", "string"
 		attribute "errorMode", "string"
 
-		fingerprint deviceId: "4096" , inClusters: "0x5E,0x20,0x86,0x72,0x26,0x5A,0x59,0x85,0x73,0x98,0x7A,0x56,0x70,0x31,0x32,0x8E,0x60,0x75,0x71,0x27,0x22", mfr: "0271", prod: "0258", deviceJoinName: "Fibaro Dimmer 2"
-		fingerprint deviceId: "4096" , inClusters: "0x5E,0x20,0x86,0x72,0x26,0x5A,0x59,0x85,0x73,0x7A,0x56,0x70,0x31,0x32,0x8E,0x60,0x75,0x71,0x27,0x22", mfr: "0271", prod: "0258", deviceJoinName: "Fibaro Dimmer 2"
+		fingerprint  mfr:"010F", prod:"0102", deviceId:"1000", inClusters:"0x5E,0x20,0x86,0x72,0x26,0x5A,0x59,0x85,0x73,0x98,0x7A,0x56,0x70,0x31,0x32,0x8E,0x60,0x75,0x71,0x27,0x22", outClusters:"0x2B" 
 	}
 
 	preferences {
@@ -48,45 +47,37 @@ metadata {
 	}
 }
 
-def on() { secureCmd(zwave.basicV1.basicSet(value: 255)) }
+def on() { encapCmd(zwave.basicV1.basicSet(value: 255)) }
 
-def off() { secureCmd(zwave.basicV1.basicSet(value: 0)) }
+def off() { encapCmd(zwave.basicV1.basicSet(value: 0)) }
 
 def toggle() { device.currentValue("switch") != "on" ? on():off() }
 
-def startLevelChange(direction){ secureCmd(zwave.switchMultilevelV1.switchMultilevelStartLevelChange(upDown: (direction == "down")? 1 : 0, ignoreStartLevel: 1, startLevel: 0)) }
+def startLevelChange(String direction){ encapCmd(zwave.switchMultilevelV1.switchMultilevelStartLevelChange(upDown: (direction == "down")? 1 : 0, ignoreStartLevel: 1, startLevel: 0)) }
 
-def stopLevelChange(){ secureCmd(zwave.switchMultilevelV1.switchMultilevelStopLevelChange()) }
+def stopLevelChange() { encapCmd(zwave.switchMultilevelV1.switchMultilevelStopLevelChange()) }
 
-def setLevel(level, rate = null ) { 
-	if (rate == null) {
-		secureCmd(zwave.basicV1.basicSet(value: (level > 0) ? level-1 : 0)) 
-	} else {
-		secureCmd(zwave.switchMultilevelV3.switchMultilevelSet(value: (level > 0) ? level-1 : 0, dimmingDuration: rate)) 
-	}
-}
+def setLevel(BigDecimal level, BigDecimal duration = null ) { encapCmd(zwave.switchMultilevelV3.switchMultilevelSet(value: ((level.toFloat()/100*99).round()), dimmingDuration: duration)) }
 
 def refresh() {
 	def cmds = []
-	cmds << secureCmd(zwave.meterV3.meterGet(scale: 0))
-	cmds << secureCmd(zwave.sensorMultilevelV5.sensorMultilevelGet())
+	cmds << encapCmd(zwave.meterV3.meterGet(scale: 0))
+	cmds << encapCmd(zwave.sensorMultilevelV5.sensorMultilevelGet())
 	delayBetween(cmds,500)
 }
 
-def clearError() { sendEvent(name: "errorMode", value: "clear") }
+def clearError() { sendEvent([name: "errorMode", value: "clear"]) }
 
 /*
 ###################
 ## Encapsulation ##
 ###################
 */
-def secureCmd(cmd) { //zwave secure encapsulation
-	logging "debug", "secureCmd: ${cmd}"
-	if (getDataValue("zwaveSecurePairingComplete") == "true") {
-		return zwave.securityV1.securityMessageEncapsulation().encapsulate(cmd).format()
-	} else {
-		return cmd.format()
-	}
+def encapCmd(hubitat.zwave.Command cmd, Integer ep=null) { //for all your encap needs :D
+	logging "encapCmd: ${cmd} ep: ${ep}"
+	if (ep) cmd = zwave.multiChannelV3.multiChannelCmdEncap(destinationEndPoint:ep).encapsulate(cmd) 
+	if (getDataValue("zwaveSecurePairingComplete") == "true") cmd = zwave.securityV1.securityMessageEncapsulation().encapsulate(cmd) 
+	return cmd.format()
 }
 
 /*
@@ -95,39 +86,35 @@ def secureCmd(cmd) { //zwave secure encapsulation
 ######################
 */
 void parse(String description){
-	logging "debug", "parse: ${description}"
+	logging "parse: ${description}"
 	hubitat.zwave.Command cmd = zwave.parse(description,commandClassVersions)
 	if (cmd) { zwaveEvent(cmd) }
 }
 
 def zwaveEvent(hubitat.zwave.commands.securityv1.SecurityMessageEncapsulation cmd) {
+	logging "SecurityMessageEncapsulation: ${cmd}"
 	def encapCmd = cmd.encapsulatedCommand()
-	def result = []
-	if (encapCmd) {
-		logging "debug", "SecurityMessageEncapsulation: ${cmd}"
-		zwaveEvent(encapCmd)
-	} else {
-	   logging "warn", "Unable to extract secure cmd from: ${cmd}"
-	}
+	if (encapCmd) zwaveEvent(encapCmd)
+	else logging "Unable to extract secure cmd from: ${cmd}", "warn"
 }
 
-def zwaveEvent(hubitat.zwave.commands.basicv1.BasicReport cmd) { logging "debug", "(ignored) BasicReport: ${cmd}" /*ignore*/ }
+def zwaveEvent(hubitat.zwave.commands.basicv1.BasicReport cmd) { logging "(ignored) BasicReport: ${cmd}" /*ignore*/ }
 
-def zwaveEvent(hubitat.zwave.commands.basicv1.BasicSet cmd) { logging "debug", "(ignored) BasicSet: ${cmd}" /*ignore*/ }
+def zwaveEvent(hubitat.zwave.commands.basicv1.BasicSet cmd) { logging "(ignored) BasicSet: ${cmd}" /*ignore*/ }
 
 def zwaveEvent(hubitat.zwave.commands.switchbinaryv1.SwitchBinaryReport cmd) {
-	logging "debug", "SwitchBinaryReport value: ${cmd.value}"
-	logging "info", "${(cmd.value == 0 ) ? "off": "on"}"
+	logging "SwitchBinaryReport value: ${cmd.value}"
+	logging "${(cmd.value == 0 ) ? "off": "on"}", "info"
 	sendEvent([name: "switch", value: (cmd.value == 0 ) ? "off": "on"])
 }
 
 def zwaveEvent(hubitat.zwave.commands.sensormultilevelv5.SensorMultilevelReport cmd) {
-	logging "debug", "SensorMultilevelReport value, ${cmd.scaledSensorValue} sensorType: ${cmd.sensorType}"
-	if ( cmd.sensorType == 4 ) { sendEvent(name: "power", value: cmd.scaledSensorValue, unit: "W") }
+	logging "SensorMultilevelReport value, ${cmd.scaledSensorValue} sensorType: ${cmd.sensorType}"
+	if ( cmd.sensorType == 4 ) { sendEvent([name: "power", value: cmd.scaledSensorValue, unit: "W"]) }
 }
 
 def zwaveEvent(hubitat.zwave.commands.meterv3.MeterReport cmd ) {
-	logging "debug", "MeterReport value: ${cmd.scaledMeterValue} scale: ${cmd.scale}"
+	logging "MeterReport value: ${cmd.scaledMeterValue} scale: ${cmd.scale}"
 	switch (cmd.scale) {
 		case 0: sendEvent([name: "energy", value: cmd.scaledMeterValue, unit: "kWh"]); break
 		case 2: sendEvent([name: "power", value: cmd.scaledMeterValue, unit: "W"]); break
@@ -135,13 +122,13 @@ def zwaveEvent(hubitat.zwave.commands.meterv3.MeterReport cmd ) {
 }
 
 def zwaveEvent(hubitat.zwave.commands.switchmultilevelv3.SwitchMultilevelReport cmd) {
-	logging "debug", "SwitchMultilevelReport received, value: ${cmd.value}"
-	sendEvent(name: "switch", value: (cmd.value > 0) ? "on" : "off")
-	sendEvent(name: "level", value: (cmd.value > 0) ? cmd.value+1 : 0) 
+	logging "SwitchMultilevelReport received, value: ${cmd.value}"
+	sendEvent([name: "switch", value: (cmd.value > 0) ? "on" : "off"])
+	sendEvent([name: "level", value: (cmd.value.toFloat()/99*100).round()])
 }
 
 def zwaveEvent(hubitat.zwave.commands.centralscenev1.CentralSceneNotification cmd) {
-	logging "debug", "CentralSceneNotification: ${cmd}"
+	logging "CentralSceneNotification: ${cmd}"
 	def String action
 	def Integer button
 	switch (cmd.sceneNumber as Integer) {
@@ -158,39 +145,29 @@ def zwaveEvent(hubitat.zwave.commands.centralscenev1.CentralSceneNotification cm
 	
 	description = "button ${button} was ${action}" + ( (button == 3 )? " ( button 2 trippletap )" : "" )
 	
-	logging "info", description
-	sendEvent(name:action, value:button, descriptionText: description, isStateChange:true, type:type)
+	logging description, "info"
+	sendEvent([name:action, value:button, descriptionText: description])
 }
 
 def zwaveEvent(hubitat.zwave.commands.notificationv3.NotificationReport cmd) {
-	logging "debug", "NotificationReport received for ${cmd.event}, parameter value: ${cmd.eventParameter[0]}"
+	logging "NotificationReport received for ${cmd.event}, parameter value: ${cmd.eventParameter[0]}"
 	switch (cmd.notificationType) {
-		case 4:
-			switch (cmd.event) {
-				case 0: sendEvent(name: "errorMode", value: "clear"); break;
-				case [1,2]: sendEvent(name: "errorMode", value: "overheat"); break;
-			}; break;
+		case 4: sendEvent([name: "errorMode", value: cmd.event == 0 ? "clear" : "overheat"]); break;
 		case 8:
 			switch (cmd.event) {
-				case 0: sendEvent(name: "errorMode", value: "clear"); break;
-				case 4: sendEvent(name: "errorMode", value: "surge"); break;
-				case 5: sendEvent(name: "errorMode", value: "voltage drop"); break;
-				case 6: sendEvent(name: "errorMode", value: "overcurrent"); break;
-				case 8: sendEvent(name: "errorMode", value: "overload"); break;
-				case 9: sendEvent(name: "errorMode", value: "load error"); break;
+				case 0: sendEvent([name: "errorMode", value: "clear"]); break;
+				case 4: sendEvent([name: "errorMode", value: "surge"]); break;
+				case 5: sendEvent([name: "errorMode", value: "voltage drop"]); break;
+				case 6: sendEvent([name: "errorMode", value: "overcurrent"]); break;
+				case 8: sendEvent([name: "errorMode", value: "overload"]); break;
+				case 9: sendEvent([name: "errorMode", value: "load error"]); break;
 			}; break;
-		case 9:
-			switch (cmd.event) {
-				case 0: sendEvent(name: "errorMode", value: "clear"); break;
-				case [1,3]: sendEvent(name: "errorMode", value: "hardware"); break;
-			}; break;
+		case 9: sendEvent([name: "errorMode", value: cmd.event == 0 ? "clear" : "hardware"]); break;
 		default: logging "warn", "$Unknown zwaveAlarmType: ${cmd.zwaveAlarmType}"
 	}
 }
 
-void zwaveEvent(hubitat.zwave.Command cmd){
-	logging "warn", "unhandled zwaveEvent: ${cmd}"
-}
+void zwaveEvent(hubitat.zwave.Command cmd) { logging "unhandled zwaveEvent: ${cmd}", "warn" }
 
 /*
 ####################
@@ -198,60 +175,57 @@ void zwaveEvent(hubitat.zwave.Command cmd){
 ####################
 */
 def zwaveEvent(hubitat.zwave.commands.configurationv2.ConfigurationReport cmd) {
-	logging "debug", "ConfigurationReport: ${cmd}"
+	logging "ConfigurationReport: ${cmd}"
 	def paramData = parameterMap.find( {it.num == cmd.parameterNumber } )
 	if (paramData) {
-		def previousVal = state."${paramData.key}".toString()
-		def expectedVal = this["${paramData.key}"].toString()
+		def previousVal = state."${paramData?.key}".toString()
+		def expectedVal = this["${paramData?.key}"].toString()
 		def receivedVal = cmd.scaledConfigurationValue.toString()
-
-		logging "info", "Parameter ${paramData.key} value is ${receivedVal} expected ${expectedVal}"
-		
-		if (previousVal == receivedVal && expectedVal == receivedVal) {
-			//ignore
+		logging "Parameter ${paramData.key} value is ${receivedVal} expected ${expectedVal}", "info"
+		if (previousVal == receivedVal && expectedVal == receivedVal) { //ignore
 		} else if (expectedVal == receivedVal) {
-			logging "debug", "Parameter ${paramData.key} as expected"
+			logging "Parameter ${paramData.key} as expected"
 			state."${paramData.key}" = receivedVal
 			syncNext()
 		} else if (previousVal == receivedVal) {
-			logging "debug", "Parameter ${paramData.key} not changed - sync failed"
-			if (!device.currentValue("syncStatus").contains("Rejected")) { sendEvent(name: "syncStatus", value: "Wrong value on param ${paramData.num}") }
+			logging "Parameter ${paramData.key} not changed"
+			if (device.currentValue("syncStatus").contains("in progres") && paramData.num != 13 ) { sendEvent(name: "syncStatus", value: "wrong value on param ${paramData.num}") }
 		} else {
-			logging "debug", "Parameter ${paramData.key} new value"
+			logging "Parameter ${paramData.key} new value"
 			device.updateSetting("${paramData.key}", [value:receivedVal, type: paramData.type])
 			state."${paramData.key}" = receivedVal
-		}  
+		}
 	} else {
-		logging "debug", "Received parameter ${cmd.parameterNumber} data, value is ${cmd.scaledConfigurationValue}. Ignoring" //ignore unused parameters
+		logging "Received parameter ${cmd.parameterNumber} data, value is ${cmd.scaledConfigurationValue}. Ignoring" //ignore unused parameters
 	}
 }
 
 def zwaveEvent(hubitat.zwave.commands.applicationstatusv1.ApplicationRejectedRequest cmd) {
-	logging "warn", "Rejected Configuration!"
+	logging "Rejected Configuration!", "warn"
 	for ( param in parameterMap ) {
 		if (state."$param.key".toString() != this["$param.key"].toString()) {
-			sendEvent(name: "syncStatus", value: "Rejected Request for parameter: ${param.num}")
+			sendEvent(name: "syncStatus", value: "rejected request for parameter: ${param.num}")
 			break
 		}
 	}
 }
 
 private syncNext() {
-	logging "debug", "syncNext()"  
+	logging "syncNext()"
 	def cmds = []
 	for ( param in parameterMap ) {
 		if ( this["$param.key"] != null && state."$param.key".toString() != this["$param.key"].toString() ) {
-			cmds << secureCmd(zwave.configurationV2.configurationSet(scaledConfigurationValue: this["$param.key"].toInteger(), parameterNumber: param.num, size: param.size))
-			cmds << secureCmd(zwave.configurationV2.configurationGet(parameterNumber: param.num))
-			sendEvent(name: "syncStatus", value: "In progress (parameter: ${param.num})")
+			cmds << encapCmd(zwave.configurationV2.configurationSet(scaledConfigurationValue: this["$param.key"].toInteger(), parameterNumber: param.num, size: param.size))
+			cmds << encapCmd(zwave.configurationV2.configurationGet(parameterNumber: param.num))
+			sendEvent(name: "syncStatus", value: "in progress (parameter: ${param.num})")
 			break
 		} 
 	}
 	if (cmds) { 
 		sendHubCommand(new hubitat.device.HubMultiAction(delayBetween(cmds,500), hubitat.device.Protocol.ZWAVE))
 	} else {
-		logging "info", "Sync Complete"  
-		if (!device.currentValue("syncStatus").contains("Rejected")) { sendEvent(name: "syncStatus", value: "Complete") }
+		logging "Sync End", "info"
+		if (device.currentValue("syncStatus").contains("in progress")) { sendEvent(name: "syncStatus", value: "complete") }
 	}
 }
 
@@ -260,13 +234,9 @@ private syncNext() {
 ## Configure, Updated etc. ##
 #############################
 */
-void configure(){
-	logging "debug", "configure"
-	if (device.currentValue("numberOfButtons") != 3) { sendEvent(name: "numberOfButtons", value: 3) }
-}
-
 def updated() {
-	logging "debug", "updated"
+	logging "updated"
+	if (device.currentValue("numberOfButtons") != 3) { sendEvent(name: "numberOfButtons", value: 3) }
 	runIn(3,"syncNext")
 }
 
@@ -275,12 +245,7 @@ def updated() {
 ## Other ##
 ###########
 */
-void logging(String type, String text) { //centralized logging
-	text = "${device.displayName}: " + text
-	if ((debugEnable || debugEnable == null) && type == "debug") log.debug text
-	if ((infoEnable || infoEnable == null) && type == "info") log.info text
-	if (type == "warn") log.warn text
-}
+void logging(String text, String type = "debug") { if ( this["${type}Enable"] || this["${type}Enable"] == null ) log."${type}" text } 
 
 /*
 ###################
