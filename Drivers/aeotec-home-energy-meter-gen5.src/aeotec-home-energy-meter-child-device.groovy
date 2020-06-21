@@ -6,7 +6,6 @@
  */
 metadata {
 	definition (name: "Aeotec Home Energy Meter Child Device", namespace: "ClassicGOD", author: "Artur Draga") {
-
 		capability "Energy Meter"
 		capability "Power Meter"
 		capability "Voltage Measurement"
@@ -18,5 +17,5 @@ metadata {
 	}
 }
 
-def refresh() {	parent.refreshChild(device.deviceNetworkId) }
-def resetEnergy() {	parent.resetEnergyChild(device.deviceNetworkId) }
+def refresh() { parent.refresh(device.deviceNetworkId[-1].toInteger()) }
+def resetEnergy() { parent.resetEnergy(device.deviceNetworkId[-1].toInteger()) }
