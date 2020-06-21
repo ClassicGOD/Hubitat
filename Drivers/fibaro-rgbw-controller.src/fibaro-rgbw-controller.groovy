@@ -1,7 +1,7 @@
 /*
- *  Fibaro RGBW Controller
+ *	Fibaro RGBW Controller
  *
- *  Copyright 2020 Artur Draga
+ *	Copyright 2020 Artur Draga
  *	
  *
  */
@@ -26,8 +26,6 @@ metadata {
 		command "programLiteFade"
 		command "programPolice"
 		command "programStop"
-		
-		command "test"
 
 		attribute "syncStatus", "string"
 		attribute "redLevel", "number"
@@ -62,21 +60,37 @@ metadata {
 	}
 }
 
-def on() { encapCmd(zwave.switchMultilevelV3.switchMultilevelSet(value: 255)) }
+def on(Integer ep = null) { encapCmd(zwave.switchMultilevelV3.switchMultilevelSet(value: 255),ep) }
 
-def off() { encapCmd(zwave.switchMultilevelV3.switchMultilevelSet(value: 0)) }
+def off(Integer ep = null) { encapCmd(zwave.switchMultilevelV3.switchMultilevelSet(value: 0),ep) }
 
-def toggle() { device.currentValue("switch") != "on" ? on():off() }
+def toggle(Integer ep = null) { device.currentValue((ep == null) ? "level" : epList[ep]) == 0 ? on(ep):off(ep) }
 
-def setLevel(level, duration = null) { encapCmd(zwave.switchMultilevelV3.switchMultilevelSet(value: (level > 0) ? level-1 : 0), 1) }
+def setLevel(BigDecimal level, duration = null, Integer ep = null) { encapCmd(zwave.switchMultilevelV3.switchMultilevelSet(value: (level > 0) ? level.shortValueExact()-1 : 0), ep) }
 
-def setRedLevel(level) { endpointLevel(level, 2) }
+def setRedLevel(level) { setLevel(level, null, 2) }
 
-def setGreenLevel(level) { endpointLevel(level, 3) }
+def setGreenLevel(level) { setLevel(level, null, 3) }
 
-def setBlueLevel(level) { endpointLevel(level, 4) }
+def setBlueLevel(level) { setLevel(level, null, 4) }
 
-def setWhiteLevel(level) { endpointLevel(level, 5) }
+def setWhiteLevel(level) { setLevel(level, null, 5) }
+
+def setColor(value) {
+	def RGB = []
+	if ( value.hex ) {
+		RGB = [R: Integer.parseInt(value.hex.substring(1,3),16), G: Integer.parseInt(value.hex.substring(3,5),16), B: Integer.parseInt(value.hex.substring(5,7),16)]
+	} else if ( value.red || value.green || value.blue ) {
+		RGB = [R: (value.red)?: 0, G: (value.green)?: 0, B: (value.blue)?: 0]
+	} else {
+		RGB = HSVtoRGB((value.hue?: device.currentValue("hue")?: 100) , (value.saturation?: device.currentValue("saturation")?: 100) , (value.level?: device.currentValue("level")?: 100))
+	}
+	encapCmd(zwave.switchColorV3.switchColorSet(red: RGB.R, green: RGB.G, blue: RGB.B, warmWhite: 0))
+}
+
+def setSaturation(value) { setColor([saturation: value]) } 
+
+def setHue(value) { setColor([hue: value]) } 
 
 def fireplace() { encapCmd(zwave.configurationV2.configurationSet(scaledConfigurationValue: 6, parameterNumber: 72, size: 1)) }
 
@@ -88,35 +102,6 @@ def programLiteFade() { encapCmd(zwave.configurationV2.configurationSet(scaledCo
 
 def programPolice() { encapCmd(zwave.configurationV2.configurationSet(scaledConfigurationValue: 10, parameterNumber: 72, size: 1)) }
 
-def refresh() {	encapCmd(zwave.sensorMultilevelV5.sensorMultilevelGet()) }
-
-def endpointOn(ep) { sendHubCommand(new hubitat.device.HubAction(encapCmd(zwave.switchMultilevelV3.switchMultilevelSet(value: 255), ep), hubitat.device.Protocol.ZWAVE)) }
-
-def endpointOff(ep) { sendHubCommand(new hubitat.device.HubAction(encapCmd(zwave.switchMultilevelV3.switchMultilevelSet(value: 0), ep), hubitat.device.Protocol.ZWAVE)) }
-
-def endpointLevel(level, ep) { sendHubCommand(new hubitat.device.HubAction(encapCmd(zwave.switchMultilevelV3.switchMultilevelSet(value: (level > 0) ? level-1 : 0), ep), hubitat.device.Protocol.ZWAVE)) }
-
-def endpointToggle(ep) { device.currentValue(epList[ep]) > 0 ? endpointOff(ep) : endpointOn(ep) }
-
-def setSaturation(value) { setColor([saturation: value]) } 
-
-def setHue(value) { setColor([hue: value]) } 
-
-def setColor(value) {
-	logging "debug", "setColor: ${value}"
-	def RGB = []
-	
-	if ( value.hex ) {
-		RGB = [R: Integer.parseInt(value.hex.substring(1,3),16), G: Integer.parseInt(value.hex.substring(3,5),16), B: Integer.parseInt(value.hex.substring(5,7),16)]
-	} else if ( value.red || value.green || value.blue ) {
-		RGB = [R: (value.red)?: 0, G: (value.green)?: 0, B: (value.blue)?: 0]
-	} else {
-		RGB = HSVtoRGB((value.hue?: device.currentValue("hue")?: 100) , (value.saturation?: device.currentValue("saturation")?: 100) , (value.level?: device.currentValue("level")?: 100))
-	}
-
-	encapCmd(zwave.switchColorV3.switchColorSet(red: RGB.R, green: RGB.G, blue: RGB.B, warmWhite: 0))
-}
-
 def programStop() {
 	def cmds = []
 	cmds << encapCmd(zwave.switchMultilevelV3.switchMultilevelSet(value: (device.currentValue("redLevel") > 0) ? device.currentValue("redLevel")-1 : 0), 2)
@@ -126,13 +111,15 @@ def programStop() {
 	delayBetween(cmds,500)
 }
 
+def refresh() {	encapCmd(zwave.sensorMultilevelV5.sensorMultilevelGet()) }
+
 /*
 ###################
 ## Encapsulation ##
 ###################
 */
 def encapCmd(hubitat.zwave.Command cmd, Integer ep=null) { //for all your encap needs :D
-	logging "debug", "encapCmd: ${cmd} ep: ${ep}"
+	logging "encapCmd: ${cmd} ep: ${ep}"
 	if (ep) cmd = zwave.multiChannelV3.multiChannelCmdEncap(destinationEndPoint:ep).encapsulate(cmd) 
 	if (getDataValue("zwaveSecurePairingComplete") == "true") cmd = zwave.securityV1.securityMessageEncapsulation().encapsulate(cmd) 
 	return cmd.format()
@@ -144,38 +131,38 @@ def encapCmd(hubitat.zwave.Command cmd, Integer ep=null) { //for all your encap 
 ######################
 */
 void parse(String description){
-	logging "debug", "parse: ${description}"
+	logging "parse: ${description}"
 	hubitat.zwave.Command cmd = zwave.parse(description,commandClassVersions)
 	if (cmd) zwaveEvent(cmd)
 }
 
 def zwaveEvent(hubitat.zwave.commands.securityv1.SecurityMessageEncapsulation cmd) {
-	logging "debug", "SecurityMessageEncapsulation: ${cmd}"
+	logging "SecurityMessageEncapsulation: ${cmd}"
 	def encapCmd = cmd.encapsulatedCommand()
 	if (encapCmd) zwaveEvent(encapCmd)
-	else logging "warn", "Unable to extract secure cmd from: ${cmd}"
+	else logging "Unable to extract secure cmd from: ${cmd}", "warn"
 }
 
 def zwaveEvent(hubitat.zwave.commands.crc16encapv1.Crc16Encap cmd) {
-	logging "debug", "Crc16Encap: ${cmd}"
+	logging "Crc16Encap: ${cmd}"
 	def encapCmd = zwave.getCommand(cmd.commandClass, cmd.command, cmd.data, commandClassVersions[cmd.commandClass as Integer]?: 1)
 	if (encapCmd) zwaveEvent(encapCmd)
-	else logging "warn", "Unable to extract Crc16Encap cmd from: ${cmd}"
+	else logging "Unable to extract Crc16Encap cmd from: ${cmd}", "warn"
 }
 
 def zwaveEvent(hubitat.zwave.commands.multichannelv3.MultiChannelCmdEncap cmd) {
-	logging "debug", "MultiChannelCmdEncap: ${cmd}"
+	logging "MultiChannelCmdEncap: ${cmd}"
 	def encapCmd = cmd.encapsulatedCommand()
 	if (encapCmd) zwaveEvent(encapCmd, cmd.sourceEndPoint as Integer)
-	else logging "warn", "Unable to extract multi channel cmd from: ${cmd}"
+	else logging "Unable to extract multi channel cmd from: ${cmd}", "warn"
 }
 
 def zwaveEvent(hubitat.zwave.commands.basicv1.BasicReport cmd, ep = null) {
-	logging "debug", "BasicReport value: ${cmd.value} ep: ${ep} ignored"
+	logging "BasicReport value: ${cmd.value} ep: ${ep} ignored"
 }
 
 def zwaveEvent(hubitat.zwave.commands.switchmultilevelv3.SwitchMultilevelReport cmd, ep=null) {
-	logging "debug", "SwitchMultilevelReport value: ${cmd.value} ep: ${ep}"
+	logging "SwitchMultilevelReport value: ${cmd.value} ep: ${ep}"
 	sendEvent([name: epList[ep], value: (cmd.value > 0) ? cmd.value+1 : 0, unit: "%"])
 	sendEvent([name: "switch", value: (cmd.value == 0 ) ? "off": "on"])
 	getChildDevice("${device.deviceNetworkId}-${ep}")?.sendEvent([name: "switch", value: (cmd.value == 0 ) ? "off": "on"])
@@ -184,26 +171,26 @@ def zwaveEvent(hubitat.zwave.commands.switchmultilevelv3.SwitchMultilevelReport 
 }
 
 def zwaveEvent(hubitat.zwave.commands.sensormultilevelv5.SensorMultilevelReport cmd) {
-	logging "debug", "SensorMultilevelReport value: ${cmd.scaledSensorValue} sensorType: ${cmd.sensorType}"
+	logging "SensorMultilevelReport value: ${cmd.scaledSensorValue} sensorType: ${cmd.sensorType}"
 	if (cmd.sensorType == 4) sendEvent([name: "power", value: cmd.scaledSensorValue, unit: "W"]) 
 }
 
 def zwaveEvent(hubitat.zwave.commands.associationv2.AssociationReport cmd) {
-	logging "debug", "AssociationReport: ${cmd}"
+	logging "AssociationReport: ${cmd}"
 	def cmds = []
 	if (cmd.groupingIdentifier == 5) {
 		if (cmd.nodeId != [zwaveHubNodeId]) {
-			logging "info", "${device.displayName} - incorrect Association for Group 5! nodeId: ${cmd.nodeId} will be changed to ${zwaveHubNodeId}"
+			logging "${device.displayName} - incorrect Association for Group 5! nodeId: ${cmd.nodeId} will be changed to ${zwaveHubNodeId}", "info"
 			cmds << encapCmd(zwave.associationV2.associationRemove(groupingIdentifier: 5))
 			cmds << encapCmd(zwave.associationV2.associationSet(groupingIdentifier: 5, nodeId: zwaveHubNodeId))
 		} else {
-			logging "debug", "${device.displayName} - Association for Group 5 correct."
+			logging "${device.displayName} - Association for Group 5 correct."
 		}
 	}
 	if (cmds) { sendHubCommand(new hubitat.device.HubMultiAction(delayBetween(cmds,500), hubitat.device.Protocol.ZWAVE)) }
 }
 
-void zwaveEvent(hubitat.zwave.Command cmd, ep=null){ logging "warn", "unhandled zwaveEvent: ${cmd} ep: ${ep}" }
+void zwaveEvent(hubitat.zwave.Command cmd, ep=null){ logging "unhandled zwaveEvent: ${cmd} ep: ${ep}", "warn" }
 
 /*
 ####################
@@ -211,30 +198,30 @@ void zwaveEvent(hubitat.zwave.Command cmd, ep=null){ logging "warn", "unhandled 
 ####################
 */
 def zwaveEvent(hubitat.zwave.commands.configurationv2.ConfigurationReport cmd) {
-	logging "debug", "ConfigurationReport: ${cmd}"
+	logging "ConfigurationReport: ${cmd}"
 	def paramData = parameterMap.find( {it.num == cmd.parameterNumber } )
 	def previousVal = state."${paramData.key}".toString()
 	def expectedVal = this["${paramData.key}"].toString()
 	def receivedVal = cmd.scaledConfigurationValue.toString()
 	
-	logging "info", "Parameter ${paramData.key} value is ${receivedVal} expected ${expectedVal}"
+	logging "Parameter ${paramData.key} value is ${receivedVal} expected ${expectedVal}", "info"
 	if (previousVal == receivedVal && expectedVal == receivedVal) { //ignore
 	} else if (expectedVal == receivedVal) {
-		logging "debug", "Parameter ${paramData.key} as expected"
+		logging "Parameter ${paramData.key} as expected"
 		state."${paramData.key}" = receivedVal
 		syncNext()
 	} else if (previousVal == receivedVal) {
-		logging "debug", "Parameter ${paramData.key} not changed - sync failed"
+		logging "Parameter ${paramData.key} not changed - sync failed"
 		if (device.currentValue("syncStatus").contains("In progres")) { sendEvent(name: "syncStatus", value: "Wrong value on param ${paramData.num}") }
 	} else {
-		logging "debug", "Parameter ${paramData.key} new value"
+		logging "Parameter ${paramData.key} new value"
 		device.updateSetting("${paramData.key}", [value:receivedVal, type: paramData.type])
 		state."${paramData.key}" = receivedVal
 	}
 }
 
 def zwaveEvent(hubitat.zwave.commands.applicationstatusv1.ApplicationRejectedRequest cmd) {
-	logging "warn", "Rejected Configuration!"
+	logging "Rejected Configuration!", "warn"
 	for ( param in parameterMap ) {
 		if (state."$param.key".toString() != this["$param.key"].toString()) {
 			sendEvent(name: "syncStatus", value: "Rejected Request for parameter: ${param.num}")
@@ -244,7 +231,7 @@ def zwaveEvent(hubitat.zwave.commands.applicationstatusv1.ApplicationRejectedReq
 }
 
 private syncNext() {
-	logging "debug", "syncNext()"
+	logging "syncNext()"
 	def cmds = []
 	for ( param in parameterMap ) {
 		if ( this["$param.key"] != null && state."$param.key".toString() != this["$param.key"].toString() ) {
@@ -257,7 +244,7 @@ private syncNext() {
 	if (cmds) { 
 		sendHubCommand(new hubitat.device.HubMultiAction(delayBetween(cmds,500), hubitat.device.Protocol.ZWAVE))
 	} else {
-		logging "info", "Sync Complete"
+		logging "Sync End", "info"
 		if (device.currentValue("syncStatus").contains("In progress")) { sendEvent(name: "syncStatus", value: "Complete") }
 	}
 }
@@ -269,7 +256,7 @@ private syncNext() {
 */
 
 def updated() {
-	logging "debug", "updated"
+	logging "updated"
 	if (!device.currentValue("syncStatus")) { state.clear() }
 	syncNext()
 	createChildDevices()
@@ -281,15 +268,10 @@ def updated() {
 ## Other ##
 ###########
 */
-void logging(String type, String text) { //centralized logging
-	text = "${device.displayName}: " + text
-	if ((debugEnable || debugEnable == null) && type == "debug") log.debug text
-	if ((infoEnable || infoEnable == null) && type == "info") log.info text
-	if (type == "warn") log.warn text
-}
+void logging(String text, String type = "debug") { if ( this["${type}Enable"] || this["${type}Enable"] == null ) log."${type}" text } 
 
 private createChildDevices() {
-	logging "debug", "createChildDevices"	
+	logging "createChildDevices"	
 	(2..5).each{
 		if (this["ep${it}Child"]) {
 			if (!getChildDevice("${device.deviceNetworkId}-${it}")) {
@@ -307,7 +289,7 @@ private createChildDevices() {
 }
 
 def HSVtoRGB(Float H, Float S, Float V) { 
-	logging "debug", "HSVtoRGB H:${H} S:${S} V:${V} "
+	logging "HSVtoRGB H:${H} S:${S} V:${V} "
 	H = H*3.6 //0-100 to 0-360
 	S = S/100
 	V = V/100
@@ -332,7 +314,7 @@ def HSVtoRGB(Float H, Float S, Float V) {
 }
 
 def RGBtoHSV(Float R, Float G, Float B) { 
-	logging "debug", "RGBtoHSV R:${R} G:${G} B:${B} "
+	logging "RGBtoHSV R:${R} G:${G} B:${B} "
 	R = R / 99 //0-99
 	G = G / 99 //0-99
 	B = B / 99 //0-99
@@ -364,7 +346,6 @@ def setHSV() {
 	)
 	sendEvent([name: "hue", value: HSV.H])
 	sendEvent([name: "saturation", value: HSV.S])
-	//sendEvent([name: "hslLevel", value: HSV.L])
 }
 
 /*
