@@ -66,7 +66,7 @@ def off(Integer ep = null) { encapCmd(zwave.switchMultilevelV3.switchMultilevelS
 
 def toggle(Integer ep = null) { device.currentValue((ep == null) ? "level" : epList[ep]) == 0 ? on(ep):off(ep) }
 
-def setLevel(BigDecimal level, duration = null, Integer ep = null) { encapCmd(zwave.switchMultilevelV3.switchMultilevelSet(value: (level > 0) ? level.shortValueExact()-1 : 0), ep) }
+def setLevel(BigDecimal level, duration = null, Integer ep = null) { encapCmd(zwave.switchMultilevelV3.switchMultilevelSet(value: (level.toFloat()/100*99).round() ), ep) }
 
 def setRedLevel(level) { setLevel(level, null, 2) }
 
@@ -83,7 +83,11 @@ def setColor(value) {
 	} else if ( value.red || value.green || value.blue ) {
 		RGB = [R: (value.red)?: 0, G: (value.green)?: 0, B: (value.blue)?: 0]
 	} else {
-		RGB = HSVtoRGB((value.hue?: device.currentValue("hue")?: 100) , (value.saturation?: device.currentValue("saturation")?: 100) , (value.level?: device.currentValue("level")?: 100))
+		RGB = HSVtoRGB(
+			(value.hue != null ? value.hue : device.currentValue("hue") != null ? device.currentValue("hue") : 100), 
+			(value.saturation != null ? value.saturation : device.currentValue("saturation") != null ? device.currentValue("saturation") : 100) , 
+			(value.level != null ? value.level : device.currentValue("level") != null ? device.currentValue("level") : 100)
+		)
 	}
 	encapCmd(zwave.switchColorV3.switchColorSet(red: RGB.R, green: RGB.G, blue: RGB.B, warmWhite: 0))
 }
@@ -104,10 +108,10 @@ def programPolice() { encapCmd(zwave.configurationV2.configurationSet(scaledConf
 
 def programStop() {
 	def cmds = []
-	cmds << encapCmd(zwave.switchMultilevelV3.switchMultilevelSet(value: (device.currentValue("redLevel") > 0) ? device.currentValue("redLevel")-1 : 0), 2)
-	cmds << encapCmd(zwave.switchMultilevelV3.switchMultilevelSet(value: (device.currentValue("greenLevel") > 0) ? device.currentValue("greenLevel")-1 : 0), 3)
-	cmds << encapCmd(zwave.switchMultilevelV3.switchMultilevelSet(value: (device.currentValue("blueLevel") > 0) ? device.currentValue("blueLevel")-1 : 0), 4)
-	cmds << encapCmd(zwave.switchMultilevelV3.switchMultilevelSet(value: (device.currentValue("whiteLevel") > 0) ? device.currentValue("whiteLevel")-1 : 0), 5)
+	cmds << encapCmd(zwave.switchMultilevelV3.switchMultilevelSet(value: (device.currentValue("redLevel").toFloat()/100*99).round()), 2)
+	cmds << encapCmd(zwave.switchMultilevelV3.switchMultilevelSet(value: (device.currentValue("greenLevel").toFloat()/100*99).round()), 3)
+	cmds << encapCmd(zwave.switchMultilevelV3.switchMultilevelSet(value: (device.currentValue("blueLevel").toFloat()/100*99).round()), 4)
+	cmds << encapCmd(zwave.switchMultilevelV3.switchMultilevelSet(value: (device.currentValue("whiteLevel").toFloat()/100*99).round()), 5)
 	delayBetween(cmds,500)
 }
 
@@ -163,10 +167,10 @@ def zwaveEvent(hubitat.zwave.commands.basicv1.BasicReport cmd, ep = null) {
 
 def zwaveEvent(hubitat.zwave.commands.switchmultilevelv3.SwitchMultilevelReport cmd, ep=null) {
 	logging "SwitchMultilevelReport value: ${cmd.value} ep: ${ep}"
-	sendEvent([name: epList[ep], value: (cmd.value > 0) ? cmd.value+1 : 0, unit: "%"])
 	sendEvent([name: "switch", value: (cmd.value == 0 ) ? "off": "on"])
+	sendEvent([name: epList[ep], value: (cmd.value.toFloat()/99*100).round(), unit: "%"])
 	getChildDevice("${device.deviceNetworkId}-${ep}")?.sendEvent([name: "switch", value: (cmd.value == 0 ) ? "off": "on"])
-	getChildDevice("${device.deviceNetworkId}-${ep}")?.sendEvent([name: "level", value: (cmd.value > 0) ? cmd.value+1 : 0, unit: "%"])
+	getChildDevice("${device.deviceNetworkId}-${ep}")?.sendEvent([name: "level", value: (cmd.value.toFloat()/99*100).round(), unit: "%"])
 	runIn(2,"setHSV")
 }
 
@@ -254,7 +258,6 @@ private syncNext() {
 ## Configure ##
 ###############
 */
-
 def updated() {
 	logging "updated"
 	if (!device.currentValue("syncStatus")) { state.clear() }
@@ -289,7 +292,7 @@ private createChildDevices() {
 }
 
 def HSVtoRGB(Float H, Float S, Float V) { 
-	logging "HSVtoRGB H:${H} S:${S} V:${V} "
+	logging "HSVtoRGB H:${H} S:${S} V:${V}"
 	H = H*3.6 //0-100 to 0-360
 	S = S/100
 	V = V/100
@@ -315,9 +318,9 @@ def HSVtoRGB(Float H, Float S, Float V) {
 
 def RGBtoHSV(Float R, Float G, Float B) { 
 	logging "RGBtoHSV R:${R} G:${G} B:${B} "
-	R = R / 99 //0-99
-	G = G / 99 //0-99
-	B = B / 99 //0-99
+	R = R / 100//0-100
+	G = G / 100 //0-100
+	B = B / 100 //0-100
 	
 	Float min = [R, G, B].min()
 	Float max = [R, G, B].max()
@@ -339,11 +342,7 @@ def RGBtoHSV(Float R, Float G, Float B) {
 }
 
 def setHSV() {
-	HSV = RGBtoHSV(
-		(device.currentValue("redLevel") > 0)? device.currentValue("redLevel")-1 : 0,
-		(device.currentValue("greenLevel") > 0)? device.currentValue("greenLevel")-1: 0,
-		(device.currentValue("blueLevel") > 0)? device.currentValue("blueLevel")-1: 0
-	)
+	HSV = RGBtoHSV(device.currentValue("redLevel"),device.currentValue("greenLevel"),device.currentValue("blueLevel"))
 	sendEvent([name: "hue", value: HSV.H])
 	sendEvent([name: "saturation", value: HSV.S])
 }
