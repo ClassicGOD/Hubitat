@@ -1,7 +1,7 @@
 /**
- *  Fibaro RGBW Controller Child Device
+ *	Fibaro RGBW Controller Child Device
  *
- *  Copyright 2020 Artur Draga
+ *	Copyright 2020 Artur Draga
  *
  */
 metadata {
@@ -14,10 +14,10 @@ metadata {
 	}
 }
 
-def on() { parent.endpointOn(device.deviceNetworkId[-1] as Integer) }
+def on() { parent.on(device.deviceNetworkId[-1] as Integer) }
 
-def off() {	parent.endpointOff(device.deviceNetworkId[-1] as Integer) }
+def off() { parent.off(device.deviceNetworkId[-1] as Integer) }
 
-def toggle() { parent.endpointToggle(device.deviceNetworkId[-1] as Integer) }
+def toggle() { parent.toggle(device.deviceNetworkId[-1] as Integer) }
 
-def setLevel(level, duration = null) { parent.endpointLevel(level, device.deviceNetworkId[-1] as Integer) }
+def setLevel(level, duration = null) { parent.setLevel(level, null, device.deviceNetworkId[-1] as Integer) }
