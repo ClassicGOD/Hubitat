@@ -167,6 +167,21 @@ def zwaveEvent(hubitat.zwave.commands.notificationv3.NotificationReport cmd) {
 	}
 }
 
+def zwaveEvent(hubitat.zwave.commands.manufacturerspecificv2.DeviceSpecificReport cmd) { 
+	logging "DeviceSpecificReport: ${cmd}"
+    String sN = ""
+	if (cmd.deviceIdType == 1 && cmd.deviceIdDataFormat == 1) {
+		cmd.deviceIdData.each { sN +=  Integer.toHexString(it)}
+		updateDataValue("serialNumber", Integer.parseInt(sN,16).toString())
+	}
+}
+
+def zwaveEvent(hubitat.zwave.commands.versionv3.VersionReport cmd) {	
+	logging "VersionReport: ${cmd}"
+	updateDataValue("firmwareVersion", "${cmd.firmware0Version}.${cmd.firmware0SubVersion}")
+	updateDataValue("protocolVersion", "${cmd.zWaveProtocolVersion}.${cmd.zWaveProtocolSubVersion}")
+}
+
 void zwaveEvent(hubitat.zwave.Command cmd) { logging "unhandled zwaveEvent: ${cmd}", "warn" }
 
 /*
@@ -236,8 +251,12 @@ private syncNext() {
 */
 def updated() {
 	logging "updated"
-	if (device.currentValue("numberOfButtons") != 3) { sendEvent(name: "numberOfButtons", value: 3) }
+	cmds = []
 	runIn(3,"syncNext")
+	if ( device.currentValue("numberOfButtons") != 3 ) { sendEvent(name: "numberOfButtons", value: 3) }
+	if ( getDataValue("serialNumber") == null ) cmds << encapCmd(zwave.manufacturerSpecificV2.deviceSpecificGet(deviceIdType: 0))
+	cmds << encapCmd(zwave.versionV3.versionGet())
+	return delayBetween(cmds,1000)
 }
 
 /*
@@ -252,7 +271,7 @@ void logging(String text, String type = "debug") { if ( this["${type}Enable"] ||
 ## Device config ##
 ###################
 */
-@Field static Map commandClassVersions = [0x5E: 1, 0x86: 1, 0x72: 2, 0x59: 1, 0x73: 1, 0x22: 1, 0x31: 5, 0x32: 3, 0x71: 3, 0x56: 1, 0x98: 1, 0x7A: 2, 0x20: 1, 0x5A: 1, 0x85: 2, 0x26: 3, 0x8E: 2, 0x60: 3, 0x70: 2, 0x75: 2, 0x27: 1]
+@Field static Map commandClassVersions = [0x5E: 1, 0x86: 3, 0x72: 2, 0x59: 1, 0x73: 1, 0x22: 1, 0x31: 5, 0x32: 3, 0x71: 3, 0x56: 1, 0x98: 1, 0x7A: 2, 0x20: 1, 0x5A: 1, 0x85: 2, 0x26: 3, 0x8E: 2, 0x60: 3, 0x70: 2, 0x75: 2, 0x27: 1]
 
 @Field static parameterMap = [
 		[key: "minBrightnessLvl", num: 1, size: 1, type: "number", def: "1", min: 1, max: 98 , title: "Minimum brightness level"],
