@@ -118,6 +118,21 @@ def zwaveEvent(hubitat.zwave.commands.meterv3.MeterReport cmd, Integer ep=null) 
 	else getChildDevice("${device.deviceNetworkId}-${ep}")?.sendEvent([name: type, value: cmd.scaledMeterValue, unit: unit]) 
 }
 
+def zwaveEvent(hubitat.zwave.commands.manufacturerspecificv2.DeviceSpecificReport cmd) { 
+	logging "DeviceSpecificReport: ${cmd}"
+	String sN = ""
+	if (cmd.deviceIdType == 1 && cmd.deviceIdDataFormat == 1) {
+		(0..14).each { sN += Integer.toHexString(cmd.deviceIdData[it]).toUpperCase() }
+		updateDataValue("serialNumber", sN)
+	}
+}
+
+def zwaveEvent(hubitat.zwave.commands.versionv3.VersionReport cmd) {	
+	logging "VersionReport: ${cmd}"
+	updateDataValue("firmwareVersion", "${cmd.firmware0Version}.${cmd.firmware0SubVersion}")
+	updateDataValue("protocolVersion", "${cmd.zWaveProtocolVersion}.${cmd.zWaveProtocolSubVersion}")
+}
+
 void zwaveEvent(hubitat.zwave.Command cmd, Integer ep=null){ logging "unhandled zwaveEvent: ${cmd} ep: ${ep}", "warn" }
 
 /*
@@ -198,8 +213,12 @@ private syncNext() {
 */
 def updated() {
 	logging "updated"
+	cmds = []
 	runIn(3,"syncNext")
-	return response(encapCmd(zwave.multiChannelV4.multiChannelEndPointGet()))
+	cmds << encapCmd(zwave.multiChannelV4.multiChannelEndPointGet())
+	cmds << encapCmd(zwave.manufacturerSpecificV2.deviceSpecificGet(deviceIdType: 0))
+	cmds << encapCmd(zwave.versionV3.versionGet())
+	return delayBetween(cmds,1000)
 }
 
 /*
@@ -214,7 +233,7 @@ void logging(String text, String type = "debug") { if ( this["${type}Enable"] ||
 ## Device config ##
 ###################
 */
-@Field static Map commandClassVersions = [0x5E: 2, 0x86: 1, 0x72: 1, 0x32: 3, 0x56: 1, 0x60: 3, 0x8E: 2, 0x70: 2, 0x59: 1, 0x85: 2, 0x7A: 2, 0x73: 1, 0x5A: 1, 0x98: 1]
+@Field static Map commandClassVersions = [0x5E: 2, 0x86: 3, 0x72: 1, 0x32: 3, 0x56: 1, 0x60: 3, 0x8E: 2, 0x70: 2, 0x59: 1, 0x85: 2, 0x7A: 2, 0x73: 1, 0x5A: 1, 0x98: 1]
 
 @Field static parameterMap = [
 	[key: "reportingThreshold", title: "Reporting Threshold", type: "enum", options: [0: "0 - disable", 1: "1 - enable"], num: 3, size: 1, def: 1, min: 0, max: 1],
@@ -234,3 +253,4 @@ void logging(String text, String type = "debug") { if ( this["${type}Enable"] ||
 	[key: "timeGroup2", title: "Group 2 time interval", type: "number", num: 112, size: 4, def: 120, min: 0, max: 268435456],
 	[key: "timeGroup3", title: "Group 3 time interval", type: "number", num: 113, size: 4, def: 120, min: 0, max: 268435456]
 ]
+
