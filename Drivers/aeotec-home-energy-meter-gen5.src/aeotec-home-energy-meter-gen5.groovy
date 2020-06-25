@@ -216,7 +216,7 @@ def updated() {
 	cmds = []
 	runIn(3,"syncNext")
 	cmds << encapCmd(zwave.multiChannelV4.multiChannelEndPointGet())
-	cmds << encapCmd(zwave.manufacturerSpecificV2.deviceSpecificGet(deviceIdType: 0))
+	if ( getDataValue("serialNumber") == null ) cmds << encapCmd(zwave.manufacturerSpecificV2.deviceSpecificGet(deviceIdType: 0))
 	cmds << encapCmd(zwave.versionV3.versionGet())
 	return delayBetween(cmds,1000)
 }
